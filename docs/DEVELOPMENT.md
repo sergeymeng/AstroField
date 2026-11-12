@@ -17,6 +17,21 @@ swift run afspike selftest
 ./scripts/build_app.sh release
 ```
 
+## 应用图标
+
+`assets/branding/logo.png` 保存品牌图，`assets/branding/app-icon.png` 是调整过边距的应用图标母版。
+打包脚本会使用 macOS 自带的 `sips` 和 `iconutil` 生成 16–1024 像素的图标，写入
+`Sources/AstroField/Resources/AppIcon.icns`，再复制到应用的 `Contents/Resources`。
+`Info.plist` 的 `CFBundleIconFile` 指向该文件；`swift run AstroField` 通过 SwiftPM 资源加载同一图标。
+
+单独更新图标时运行：
+
+```bash
+./scripts/build_icons.sh
+```
+
+修改母版后应一并提交 PNG 和重新生成的 ICNS。图标外侧透明，蓝黑色底板内部保持不透明。
+
 ## 照片回放与截图
 
 可以从应用顶部菜单选择照片回放，也可以在启动时指定目录：

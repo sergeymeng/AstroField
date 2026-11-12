@@ -50,6 +50,7 @@ let package = Package(
             name: "AstroField",
             dependencies: ["AstroFieldKit", "AFSpikeCore"],
             path: "Sources/AstroField",
+            resources: [.copy("Resources/AppIcon.icns")],
             linkerSettings: [
                 .unsafeFlags([
                     "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"

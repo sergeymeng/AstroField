@@ -1,6 +1,10 @@
-# AstroField
+<p align="center">
+  <img src="assets/branding/app-icon.png" alt="AstroField" width="112" height="112">
+</p>
 
-在 Mac 上设置拍摄计划、对焦和检查星空照片。
+<h1 align="center">AstroField</h1>
+
+<p align="center">在 Mac 上设置拍摄计划、对焦和检查星空照片。</p>
 
 AstroField 面向使用相机、镜头和三脚架拍银河与星野的摄影师。把曝光时间、拍摄间隔和张数设好，就可以在同一个窗口里看拍摄进度、放大星点、比较试拍结果。应用使用 SwiftUI，照片处理在本机完成。
 
