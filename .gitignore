@@ -1,0 +1,42 @@
+# Build output and local dependencies
+.build/
+.swiftpm/
+/dist/
+/vendor/
+*.dSYM/
+.DS_Store
+xcuserdata/
+
+# Local captures, device logs, and research material
+/logs/
+/spike/
+/sections/
+/tools/
+/AstroField_Technical_Research_Report.md
+/HANDOFF.md
+/NIGHT_LOG.md
+/PROGRESS.md
+/morning.sh
+/capture/
+/liveview/
+*.nef
+*.NEF
+
+# Local project notes; keep the public development documentation
+/docs/*
+!/docs/ARCHITECTURE.md
+!/docs/DEVELOPMENT.md
+!/docs/screenshots/
+/docs/screenshots/*
+!/docs/screenshots/01-idle.png
+!/docs/screenshots/03-focus.png
+!/docs/screenshots/05-corners.png
+!/docs/screenshots/06-stack.png
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.p12
+*.p8
+*.mobileprovision
