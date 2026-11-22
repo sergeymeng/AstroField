@@ -234,7 +234,7 @@ public actor SequenceRunner {
 
             // Apply the plan settings before every frame so a paused/resumed run
             // follows the latest plan, but never mid-exposure. An exposure ramp
-            // is evaluated per frame (S11-B).
+            // is evaluated per frame.
             let totalFrames: Int? = {
                 if case .count(let count) = plan.end { return count }
                 return nil

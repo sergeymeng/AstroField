@@ -1,6 +1,6 @@
 import Foundation
 
-/// Exposure ramp for twilight / dawn-lapse (S11-B). Interpolates exposure seconds
+/// Exposure ramp for twilight / dawn-lapse. Interpolates exposure seconds
 /// across the planned frames. Only exposure changes; ISO and aperture stay fixed.
 public struct ExposureRamp: Codable, Equatable, Sendable {
     public enum Curve: String, Codable, Equatable, Hashable, Sendable, CaseIterable {

@@ -1,126 +1,29 @@
-# AstroField 架构
+# 从相机到屏幕
 
-## 目标
+Nikon、模拟相机和照片回放都实现了 [CameraDevice](../Sources/AstroFieldKit/CameraDevice.swift)。SwiftUI 通过 [AppModel](../Sources/AstroField/AppModel.swift) 调用这些接口。可用的按钮取决于连接时得到的 `CameraCapability` 集合。Nikon 会尝试写回当前的快门、光圈和 ISO，分别确认机身是否接受这三项设置。
 
-同一套拍摄计划、状态机、图像分析和界面逻辑，驱动三种来源：
+## 一张 LiveView 帧
 
-1. 真实 Nikon（USB / ImageCaptureCore PTP）。
-2. 模拟相机（可控、可复现）。
-3. 真实照片回放（NEF/JPEG 文件）。
+[NikonCamera](../Sources/AstroFieldKit/NikonCamera.swift) 在 `ICCEngine` 的专用线程上串行收发 PTP 命令。线程运行 ImageCaptureCore 所需的 RunLoop。相机状态回调由 AppModel 切回主线程更新窗口。
 
-## 分层
+机身返回的 JPEG 解码后放进 `LivePreview.image`，供星点检测和对焦使用。取景器另用 `displayImage` 显示灰度预览。[LiveViewStretch](../Sources/AstroFieldKit/LiveViewStretch.swift) 估算背景中位数和噪声，根据增益与黑场设置映射亮度。调亮预览时，检测器仍能比较同一尺度下的星点。
 
-```
-AstroField (SwiftUI)
-   │  界面、状态展示、用户操作
-AstroFieldKit
-   │  CameraDevice、Simulator、Playback、调度、分析、对焦、质量、叠加
-AFSpikeCore
-   │  PTP 协议层、ICCCamera、星点分析、CSV、Nikon SDK 备选
-CNikonMAID（设置 NIKON_SDK_HEADERS 时编译）
-       Nikon Remote Module SDK 的 C++ shim（备选后端）
-```
+找星模式保存计划中的曝光设置，临时使用 ISO 12800。持续无星时，它把一次 2 秒 JPEG 曝光下载到临时目录，解码后删除。MFDrive 对焦时，[FocusSearcher](../Sources/AstroFieldKit/FocusEngine.swift) 可以在最亮星周围的小窗口里反复测量。普通对焦搜索先粗扫再细调，最后补拍一张验证帧。
 
-## 相机抽象
+## 一张序列照片
 
-默认构建不依赖 Nikon SDK。MAID 后端的本地配置见 [开发说明](DEVELOPMENT.md)。
+[SequenceRunner](../Sources/AstroFieldKit/SequenceRunner.swift) 按计划调度曝光，用异步事件报告拍摄进度。变更参数、暂停和停止都在两张照片之间生效。固定开拍间隔来不及时，按计划选择顺延或跳过。
 
-`CameraDevice` 协议：
+曝光完成后，照片先进入素材列表，分析在后台逐张进行。[ImageLoader](../Sources/AstroFieldKit/ImageLoader.swift) 为测量生成浮点亮度图。NEF 可以由 Core Image 解码，也可以用 LibRaw 以 half-size 和线性 gamma 解码。LibRaw 路径按机身白电平换算亮度，自动曝光也按该尺度设定目标背景。
 
-- `connect` / `disconnect`
-- `status`（状态、型号、能力集合、备注）
-- `apply(ExposureSettings)`
-- `capture(sequence:) async throws -> ImageRecord`
-- `startLiveView` / `stopLiveView` / `livePreview`
-- `focusDrive(direction:steps:)`
+[DarkLibrary](../Sources/AstroFieldKit/DarkLibrary.swift) 从相同来源、相同 ISO 的主暗场中选择曝光时间相差不超过 10% 的候选，优先匹配图像尺寸。减暗后的亮度供预览、星点测量和叠加使用。主暗场以 Float32 像素保存在 `.darkbin` 文件中，JSON 索引记录各组拍摄参数。
 
-`Set<CameraCapability>` 决定界面中可用的操作。Nikon 在连接时写回 ISO、光圈和快门的当前值，将探测成功的项目加入能力集合。
+[SessionStore](../Sources/AstroFieldKit/SessionExporter.swift) 为每帧写入 JSON，实拍 NEF 保留原路径，模拟帧存为 16 位 TIFF。保存任务先取得所需的亮度数据，旧帧随后可以从内存释放。质量规则在测量完成后评估，达到计划条件时可暂停序列。
 
-## 线程模型
+[SessionStacker](../Sources/AstroFieldKit/SessionStacker.swift) 用第一张亮场作参考，按星点的平移量对齐后续帧并取平均。星点太少或偏移过大的帧会记入拒绝计数。固定机位的星轨预览走单独的 [StarTrailStacker](../Sources/AstroFieldKit/StarTrailStacker.swift)。
 
-- SwiftUI 状态在 `@MainActor` 的 `AppModel`。
-- `SimulatorCamera` / `PlaybackCamera`：普通类 + 锁，async 方法在通用执行器运行。
-- `NikonCamera`：`ICCEngine` 专用线程，负责 `ICCCamera` 的 RunLoop 泵；
-  `perform` 用 continuation 把同步相机调用桥接成 async；所有 ICC 调用串行化。
-- 相机状态回调可能来自任意队列，`AppModel` 统一切回 MainActor。
+## USB 会话关闭时
 
-## 图像与测量
+关闭会话和拔出设备可能各触发一次通知。`NikonCamera` 将同一会话的两条通知合成一次掉线事件。AppModel 暂停序列，按 1、2、5、5、5 秒的间隔尝试重新发现设备、打开会话并恢复 remote mode。切换相机来源时会取消旧的重连任务。连接恢复后，应用重新开始取景，并尝试写回掉线时暂存的找星前设置。
 
-- `LumaImage`：16 位解码亮度（`[Float]`），测量输入。
-- 显示拉伸、白平衡、直方图只作用于显示用的 `CGImage`，不修改 `LumaImage`。
-- LiveView 的显示与测量分离：`LivePreview.image` 是测量帧（Nikon 为相机 JPEG 原始解码），
-  `LivePreview.displayImage` 是 `LiveViewStretch` 生成的显示图。取景增益/黑场只改显示图。
-- `ImageRecord`：序列号、来源、文件 URL、拍摄设置、尺寸、预览、星点保留缩略图、
-  分析亮度（可为空以限制内存）、指标、质量结论、备注。
-- `FrameAnalyzer`：交互用快速指标（采样背景 + `StarDetector`）。
-- `StarAnalyzer`（AFSpikeCore）：CLI/测试用的全图 BFS 分析。
-- `StarDetector`：全图星点列表；`measureFast` 专供对焦的局部极大值测量。
-- RAW：默认 Core Image `CIRAWFilter` 解码；可选 LibRaw 线性解码（`CLibRaw` C++ shim，
-  half_size、gamma 1、关闭相机矩阵与单位白平衡）。LibRaw 路径的亮度满量程是传感器
-  白电平（Z7 II 15311），暗场与 Auto 的目标背景按此计算。两者都不是未处理的 CFA 数据；
-  LibRaw 更接近线性，但仍是去马赛克后的 RGB。
-
-## 拍摄计划与调度
-
-- `CapturePlan`：纯数据，Codable；开始/间隔/结束/策略/曝光渐变。
-- `ScheduleCalculator`：纯函数，理论排程与预检，虚拟时间测试的目标。
-- `SequenceRunner`：actor；AsyncStream 事件（progress/captured/failed/finished）。
-  - 固定开始间隔支持顺延/跳过；
-  - 暂停=拍完当前张；停止=停止调度（当前曝光完成）；
-  - 失败计数独立；参数变更在帧间应用。
-- `SequenceClock`：真实时钟与测试时钟；排程数学由纯函数覆盖。
-
-## 分析管线
-
-- 捕获后立即加入素材列表。
-- 分析使用串行后台链（一次一张），不阻塞拍摄；旧帧的分析亮度会被裁剪以限制内存。
-- 叠加独立于分析链，在捕获后立即进入自己的队列。
-- 质量规则在分析完成后更新；达到合格张数或异常时暂停序列。
-
-## 对焦
-
-- `FocusSearcher` actor：粗搜 → 细调 → 重复验证；不假设绝对位置或固定步长。
-- `FocusProbe`：测量/移动两个动作；模拟器与真实相机各自实现。
-- 测量优先使用 LiveView 亮度（快速、无下载），最终按拍摄参数补拍一张验证。
-- 无证据（星点不足、曲线平坦、改善低于阈值）返回「尚未确认」。
-
-## 叠加
-
-- `LiveStacker`：参考帧 + 星点质心偏移直方图估计平移；整数像素平移后平均；
-  记录每像素覆盖数；拒绝帧保留并给出原因。
-- 只处理平移；旋转、视差、移动前景、复杂地景不处理，界面明确说明。
-
-## 暗场校准
-
-- `DarkAccumulator`：逐帧 Double 累加，拒绝尺寸或曝光参数不一致的帧；`build` 输出均值
-  master 与统计（均值、检出热像素数）。
-- `DarkLibrary`：索引 JSON + 每个 master 一个 `.darkbin`（magic、宽高、Float32 像素；
-  load 校验 magic/版本/字节数/宽高）；单条像素缓存；目录可由 `ASTROFIELD_DARK_DIR` 覆盖。
-- 匹配：ISO 严格相等、曝光相对差 ≤ 10%、来源一致、同尺寸优先，其余情况回退到最近的
-  同来源候选；不跨来源静默套用。
-- 注入点：分析链在 `FrameAnalyzer.metrics` 之前减暗；减暗后的亮度写回记录并重建预览、
-  缩略图；叠加使用减暗后的亮度。减暗不修改任何文件。
-- 模拟器：`lensCovered` 时无星点、无光污染，只保留偏置/暗电流与固定单像素热像素；
-  热像素位置只依赖场景种子，正常帧与盖盖帧一致。
-
-## 会话与导出
-
-- `SessionStore`：每个序列/分组新建时间戳目录；模拟帧写 16-bit 灰度 TIFF，边车 JSON
-  （帧 ID、角色、参数、指标、质量结论、分组、是否减暗）；真实 NEF/回放只写边车并记录
-  原路径。
-- 所有文件 IO 在一个串行队列上执行，JSON/CSV 用原子写；写失败只告警，不打断拍摄。
-- `SessionReport`：CSV 逐帧、JSON 含 summary；叠加/星轨成片从 `LumaImage` 导出
-  TIFF + PNG，预览上限 1000 px。
-- AppModel 在 `addRecord` 时立即快照亮度，避免后续 `pruneLuma` 导致丢帧。
-
-## 自动重连与找星模式
-
-- `NikonCamera: ICCCameraDelegate`：会话关闭或设备移除只上报一次 `onSessionLost(reason)`，
-  保留能力集合；`reconnect()` 重建 browser/session/remote mode，跳过能力探测。
-- `ReconnectPolicy`：1/2/5/5/5 秒，最多 5 次；`CameraState.reconnecting`/`recovered`
-  驱动状态栏与监看重连层。重连任务由 `AppModel` 单实例管理，旧任务按 generation 作废。
-- 找星模式：保存计划设置，临时写 ISO 12800；LiveView 分析输出星点与最亮星；MFDrive
-  可在单星窗口执行 `FocusSearcher(minStars: 1)`。LiveView 无星时自动拍一张临时 JPEG
-  测试帧，解码后删除，不进会话。退出恢复原设置；断开期间记入 `pendingRestore`。
-- 「保持后台活跃」通过 `ProcessInfo.beginActivity` 阻止 App Nap，避免显示休眠后取景
-  轮询被节流；系统休眠仍可能发生，由重连恢复。
+「保持后台活跃」在 Nikon 连接期间通过 `ProcessInfo.beginActivity` 抑制 App Nap。机身断线和系统电源事件都带有日志，便于在显示器唤醒后核对时间。[Z7 II 拍摄记录](Z7II_APP_ACCEPTANCE.md)

@@ -2054,7 +2054,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // MARK: - Focus bracket (S10-C)
+    // MARK: - Focus bracket
 
     func runFocusBracket() {
         guard let camera, !isRunning, !focusBracketRunning, !findStarMode else { return }
@@ -2097,7 +2097,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // MARK: - Trials (S08)
+    // MARK: - Trials
 
     func runShutterTrial() {
         guard let camera, !isTrialRunning else { return }
@@ -2251,7 +2251,7 @@ final class AppModel: ObservableObject {
         showToast("已采用 \(candidate.label)", kind: .success)
     }
 
-    // MARK: - Shoot groups (S10-A)
+    // MARK: - Shoot groups
 
     func setGroupEnabled(_ id: UUID, _ enabled: Bool) {
         guard let index = groups.firstIndex(where: { $0.id == id }) else { return }
