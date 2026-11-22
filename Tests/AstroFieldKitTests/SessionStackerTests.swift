@@ -51,7 +51,7 @@ final class SessionStackerTests: XCTestCase {
         XCTAssertEqual(result.summary.accepted, 2)
         XCTAssertEqual(result.summary.rejected, 1)
         XCTAssertGreaterThan(result.summary.coverage, 0.9)
-        XCTAssertTrue(result.summary.reasonText.contains("星点不足"),
+        XCTAssertTrue(result.summary.reasonText.contains(L10n.text("星点不足，未参与叠加")),
                       result.summary.reasonText)
         XCTAssertEqual(result.image.width, 340)
         XCTAssertEqual(result.image.height, 260)

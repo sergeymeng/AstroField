@@ -16,9 +16,9 @@ enum MonitorMode: String, CaseIterable, Identifiable, Hashable {
     var displayName: String {
         switch self {
         case .live: return "LIVE"
-        case .last: return "最后一张"
-        case .compare: return "对比"
-        case .stack: return "叠加"
+        case .last: return L10n.text("最后一张")
+        case .compare: return L10n.text("对比")
+        case .stack: return L10n.text("叠加")
         }
     }
 }
@@ -33,9 +33,9 @@ enum AnalysisCropMode: String, CaseIterable, Identifiable, Hashable {
 
     var displayName: String {
         switch self {
-        case .full: return "全图"
-        case .center: return "中心"
-        case .corners: return "四角"
+        case .full: return L10n.text("全图")
+        case .center: return L10n.text("中心")
+        case .corners: return L10n.text("四角")
         case .hundred: return "100%"
         }
     }
@@ -78,7 +78,7 @@ enum StackMode: String, CaseIterable, Identifiable {
     case trails
 
     var id: String { rawValue }
-    var displayName: String { self == .mean ? "平均叠加" : "星轨" }
+    var displayName: String { self == .mean ? L10n.text("平均叠加") : L10n.text("星轨") }
 }
 
 struct StackUIState {
@@ -254,7 +254,7 @@ final class AppModel: ObservableObject {
     @Published var groupRunning = false
     @Published var groupModeActive = false
     @Published var groupTotals = GroupTotals()
-    @Published var activeGroupName: String?
+    @Published var activeGroup: ShootGroup?
     @Published var activeGroupIndex: Int?
     @Published var trialCandidates: [TrialCandidate] = []
     @Published var isTrialRunning = false
@@ -351,7 +351,7 @@ final class AppModel: ObservableObject {
         ticker = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.now = Date() }
         }
-        appendLog("AstroField 启动，默认使用模拟相机")
+        appendLog(L10n.text("AstroField 启动，默认使用模拟相机"))
         let demo = env["ASTROFIELD_DEMO"]
         if demo == "disconnected" { return }
         if env["ASTROFIELD_SOURCE"] == "nikon" {
@@ -380,10 +380,10 @@ final class AppModel: ObservableObject {
     private func observePowerEvents() {
         let center = NSWorkspace.shared.notificationCenter
         let names: [(Notification.Name, String, LogEntry.Level)] = [
-            (NSWorkspace.screensDidSleepNotification, "显示休眠", .info),
-            (NSWorkspace.screensDidWakeNotification, "显示唤醒", .info),
-            (NSWorkspace.willSleepNotification, "系统休眠", .warning),
-            (NSWorkspace.didWakeNotification, "系统唤醒", .info)
+            (NSWorkspace.screensDidSleepNotification, L10n.text("显示休眠"), .info),
+            (NSWorkspace.screensDidWakeNotification, L10n.text("显示唤醒"), .info),
+            (NSWorkspace.willSleepNotification, L10n.text("系统休眠"), .warning),
+            (NSWorkspace.didWakeNotification, L10n.text("系统唤醒"), .info)
         ]
         for (name, text, level) in names {
             center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
@@ -627,7 +627,7 @@ final class AppModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 5_500_000_000)
             setMonitorMode(.stack)
         case "error":
-            simulator?.faults.append(.failNextCapture("演示：模拟曝光失败"))
+            simulator?.faults.append(.failNextCapture(L10n.text("演示：模拟曝光失败")))
             captureOnce()
         default:
             break
@@ -691,8 +691,8 @@ final class AppModel: ObservableObject {
 
     var sourceLabel: String {
         switch sourceKind {
-        case .simulator: return "模拟"
-        case .playback: return "回放"
+        case .simulator: return L10n.text("模拟")
+        case .playback: return L10n.text("回放")
         case .nikon: return "Nikon"
         }
     }
@@ -724,30 +724,30 @@ final class AppModel: ObservableObject {
     var monitorLabel: String {
         switch monitorMode {
         case .live:
-            return liveImage == nil ? "无画面" : sourceLabel
+            return liveImage == nil ? L10n.text("无画面") : sourceLabel
         case .last:
             if let record = selectedRecord { return record.displayName }
-            return "无照片"
+            return L10n.text("无照片")
         case .stack:
-            return "叠加 \(stack.accepted) 张"
+            return L10n.text("叠加 %@ 张", stack.accepted)
         case .compare:
-            return "对比"
+            return L10n.text("对比")
         }
     }
 
     var countdownText: String {
         if let end = progress.exposureEnd, end > now {
-            return "曝光 " + formatCountdown(end.timeIntervalSince(now))
+            return L10n.text("曝光 ") + formatCountdown(end.timeIntervalSince(now))
         }
         if let next = progress.nextStart, next > now {
-            return "下一张 " + formatCountdown(next.timeIntervalSince(now))
+            return L10n.text("下一张 ") + formatCountdown(next.timeIntervalSince(now))
         }
         switch progress.phase {
-        case .paused: return "已暂停"
-        case .finished: return "已完成"
-        case .stopped: return "已停止"
-        case .failed: return progress.message.isEmpty ? "失败" : progress.message
-        case .idle: return "待机"
+        case .paused: return L10n.text("已暂停")
+        case .finished: return L10n.text("已完成")
+        case .stopped: return L10n.text("已停止")
+        case .failed: return progress.message.isEmpty ? L10n.text("失败") : progress.message
+        case .idle: return L10n.text("待机")
         default: return "—"
         }
     }
@@ -793,7 +793,7 @@ final class AppModel: ObservableObject {
             }
             cam.onDiagnostic = { [weak self] line in
                 Task { @MainActor in
-                    self?.appendLog("ICC：\(line)", level: .warning)
+                    self?.appendLog(L10n.text("ICC：%@", line), level: .warning)
                 }
             }
             device = cam
@@ -810,22 +810,23 @@ final class AppModel: ObservableObject {
                 self.status = status
                 self.updateActivity()
                 if case .error(let message) = status.state, self.reconnectTask == nil {
-                    self.appendLog("相机错误：\(message)", level: .error)
+                    self.appendLog(L10n.text("相机错误：%@", message), level: .error)
                 }
             }
         }
         do {
             try await device.connect()
             status = device.status
-            appendLog("已连接 \(device.status.model)（\(kind.displayName)）")
+            appendLog(L10n.text("已连接 %@（%@）", device.status.model, kind.displayName))
             updateActivity()
             refreshLiveLoop()
         } catch {
-            status = CameraStatus(state: .error(String(describing: error)),
+            let message = NikonCamera.connectionMessage(for: error)
+            status = CameraStatus(state: .error(message),
                                   model: kind.displayName, capabilities: [],
-                                  notes: ["连接失败"])
-            appendLog("连接失败：\(error)", level: .error)
-            showToast("连接失败：\(error)", kind: .error)
+                                  notes: [L10n.text("连接失败")])
+            appendLog(L10n.text("连接失败：%@", error), level: .error)
+            showToast(L10n.text("连接失败：%@", message), kind: .error)
         }
         isConnecting = false
     }
@@ -879,8 +880,8 @@ final class AppModel: ObservableObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "使用此目录"
-        panel.message = "选择包含 NEF / JPEG 样本的目录"
+        panel.prompt = L10n.text("使用此目录")
+        panel.message = L10n.text("选择包含 NEF / JPEG 样本的目录")
         if panel.runModal() == .OK, let url = panel.url {
             Task { await connect(.playback, playbackDirectory: url) }
         }
@@ -933,7 +934,7 @@ final class AppModel: ObservableObject {
 
     func enterFindStarMode() {
         guard let camera, canUseFindStarMode else {
-            showToast("当前状态不能进入找星模式", kind: .warning)
+            showToast(L10n.text("当前状态不能进入找星模式"), kind: .warning)
             return
         }
         finderSavedSettings = plan.settings
@@ -949,17 +950,17 @@ final class AppModel: ObservableObject {
         liveAssistEnabled = true
         liveZoom = .x1
         if monitorMode != .live { monitorMode = .live }
-        findStarStatus = "临时 ISO 12800，寻找星点…"
+        findStarStatus = L10n.text("临时 ISO 12800，寻找星点…")
         var boosted = plan.settings
         boosted.iso = 12800
         Task {
             do {
                 try await camera.apply(boosted)
-                appendLog("找星模式：临时 ISO 12800", level: .info)
+                appendLog(L10n.text("找星模式：临时 ISO 12800"), level: .info)
                 refreshLiveLoop()
             } catch {
-                findStarStatus = "设置 ISO 失败：\(error)"
-                appendLog("找星模式设置失败：\(error)", level: .error)
+                findStarStatus = L10n.text("设置 ISO 失败：%@", error)
+                appendLog(L10n.text("找星模式设置失败：%@", error), level: .error)
                 exitFindStarMode()
             }
         }
@@ -983,10 +984,10 @@ final class AppModel: ObservableObject {
         Task {
             do {
                 try await camera.apply(saved)
-                appendLog("找星模式退出，已恢复拍摄设置", level: .info)
+                appendLog(L10n.text("找星模式退出，已恢复拍摄设置"), level: .info)
             } catch {
                 pendingRestore = saved
-                appendLog("恢复拍摄设置失败：\(error)", level: .warning)
+                appendLog(L10n.text("恢复拍摄设置失败：%@", error), level: .warning)
             }
             refreshLiveLoop()
         }
@@ -995,8 +996,8 @@ final class AppModel: ObservableObject {
     func focusBrightestStar() {
         guard let camera, let star = liveBrightestStar, canFocusBrightestStar else { return }
         focusCancel.clear()
-        findStarFocusMessage = "对焦中…"
-        focus = FocusUIState(isRunning: true, samples: [], message: "对焦最亮星…",
+        findStarFocusMessage = L10n.text("对焦中…")
+        focus = FocusUIState(isRunning: true, samples: [], message: L10n.text("对焦最亮星…"),
                              result: nil, currentFWHM: nil)
         let isSimulator = sourceKind == .simulator
         // A narrow window around the star keeps the search on that star; the
@@ -1048,7 +1049,7 @@ final class AppModel: ObservableObject {
                             guard let self else { return }
                             self.focus.samples.append(sample)
                             self.focus.currentFWHM = sample.measurement.medianFWHM
-                            self.focus.message = String(format: "步数 %+d，FWHM %.2f",
+                            self.focus.message = String(format: L10n.text("步数 %+d，FWHM %.2f"),
                                                         sample.relativeSteps,
                                                         sample.measurement.medianFWHM)
                         }
@@ -1058,20 +1059,20 @@ final class AppModel: ObservableObject {
                 focus.result = result
                 focus.message = result.message
                 findStarStatus = result.status == .confirmed
-                    ? String(format: "最亮星已对焦，FWHM %.2f", result.best?.medianFWHM ?? 0)
-                    : "最亮星对焦未确认：\(result.message)"
+                    ? String(format: L10n.text("最亮星已对焦，FWHM %.2f"), result.best?.medianFWHM ?? 0)
+                    : L10n.text("最亮星对焦未确认：%@", result.message)
                 findStarFocusMessage = result.status == .confirmed
-                    ? String(format: "已对焦  FWHM %.2f", result.best?.medianFWHM ?? 0)
-                    : "未确认：\(result.message)"
-                appendLog("找星对焦：\(result.message)",
+                    ? String(format: L10n.text("已对焦  FWHM %.2f"), result.best?.medianFWHM ?? 0)
+                    : L10n.text("未确认：%@", result.message)
+                appendLog(L10n.text("找星对焦：%@", result.message),
                           level: result.status == .confirmed ? .info : .warning)
                 suppressLive = false
                 refreshLiveLoop()
             } catch {
                 focus.isRunning = false
-                focus.message = "对焦失败：\(error)"
-                findStarStatus = "最亮星对焦失败：\(error)"
-                findStarFocusMessage = "失败：\(error)"
+                focus.message = L10n.text("对焦失败：%@", error)
+                findStarStatus = L10n.text("最亮星对焦失败：%@", error)
+                findStarFocusMessage = L10n.text("失败：%@", error)
                 appendLog(focus.message, level: .error)
                 suppressLive = false
                 refreshLiveLoop()
@@ -1134,7 +1135,7 @@ final class AppModel: ObservableObject {
         guard findStarMode, !finderTestRunning else { return }
         if stars.isEmpty {
             finderZeroFrames += 1
-            findStarStatus = "未检测到星点"
+            findStarStatus = L10n.text("未检测到星点")
             guard !finderTestAttempted,
                   finderZeroFrames >= 3,
                   Date().timeIntervalSince(finderModeStartedAt) > 2.5 else { return }
@@ -1142,14 +1143,14 @@ final class AppModel: ObservableObject {
             captureFinderTestFrame()
         } else {
             finderZeroFrames = 0
-            findStarStatus = "检测到 \(stars.count) 颗星"
+            findStarStatus = L10n.text("检测到 %@ 颗星", stars.count)
         }
     }
 
     private func captureFinderTestFrame() {
         guard let camera, findStarMode, !finderTestRunning else { return }
         finderTestRunning = true
-        findStarStatus = "测试帧：2 s / ISO 12800 / JPEG"
+        findStarStatus = L10n.text("测试帧：2 s / ISO 12800 / JPEG")
         suppressLive = true
         liveTask?.cancel()
         liveTask = nil
@@ -1173,7 +1174,7 @@ final class AppModel: ObservableObject {
                     let record = try await camera.capture(sequence: -1)
                     guard let analysis = record.analysisLuma
                         ?? record.preview.flatMap({ LumaImage.from(cgImage: $0) }) else {
-                        throw CameraError.io("测试帧解码失败")
+                        throw CameraError.io(L10n.text("测试帧解码失败"))
                     }
                     let displaySource = analysis.downsampled(maxWidth: 2200)
                     guard let preview = displaySource.displayImage(low: 0,
@@ -1181,7 +1182,7 @@ final class AppModel: ObservableObject {
                                                                    gamma: 1)
                         ?? record.preview
                         ?? analysis.displayImage() else {
-                        throw CameraError.io("测试帧预览失败")
+                        throw CameraError.io(L10n.text("测试帧预览失败"))
                     }
                     luma = analysis
                     raw = preview
@@ -1204,21 +1205,21 @@ final class AppModel: ObservableObject {
                     }
                     self.finderTestFrameShown = true
                     self.findStarStatus = stars.isEmpty
-                        ? "测试帧：未检测到星点"
-                        : "测试帧：检测到 \(stars.count) 颗星"
-                    self.appendLog("找星测试帧：\(stars.count) 颗星",
+                        ? L10n.text("测试帧：未检测到星点")
+                        : L10n.text("测试帧：检测到 %@ 颗星", stars.count)
+                    self.appendLog(L10n.text("找星测试帧：%@ 颗星", stars.count),
                                    level: stars.isEmpty ? .warning : .info)
                 }
             } catch {
-                findStarStatus = "测试帧失败：\(error)"
-                appendLog("找星测试帧失败：\(error)", level: .error)
+                findStarStatus = L10n.text("测试帧失败：%@", error)
+                appendLog(L10n.text("找星测试帧失败：%@", error), level: .error)
             }
             if self.status.state.isConnected {
                 do {
                     try await camera.apply(saved)
                 } catch {
                     self.pendingRestore = saved
-                    self.appendLog("测试帧后恢复设置失败：\(error)", level: .warning)
+                    self.appendLog(L10n.text("测试帧后恢复设置失败：%@", error), level: .warning)
                 }
             } else {
                 self.pendingRestore = saved
@@ -1325,7 +1326,7 @@ final class AppModel: ObservableObject {
         if should, activityToken == nil {
             activityToken = ProcessInfo.processInfo.beginActivity(
                 options: [.userInitiatedAllowingIdleSystemSleep],
-                reason: "AstroField Nikon 会话取景与拍摄")
+                reason: L10n.text("AstroField Nikon 会话取景与拍摄"))
         } else if !should, let token = activityToken {
             ProcessInfo.processInfo.endActivity(token)
             activityToken = nil
@@ -1354,9 +1355,9 @@ final class AppModel: ObservableObject {
                               lens: base.lens,
                               batteryPercent: base.batteryPercent,
                               capabilities: base.capabilities,
-                              notes: ["ICC 会话断开：\(reason)"])
+                              notes: [L10n.text("ICC 会话断开：%@", reason)])
         if findStarMode { exitFindStarMode() }
-        appendLog("ICC 会话断开：\(reason)", level: .error)
+        appendLog(L10n.text("ICC 会话断开：%@", reason), level: .error)
         updateActivity()
         guard let cam = camera as? NikonCamera else { return }
         reconnectTask = Task { [weak self] in
@@ -1366,7 +1367,7 @@ final class AppModel: ObservableObject {
 
     private func runReconnect(_ cam: NikonCamera, generation: Int) async {
         let policy = ReconnectPolicy.default
-        var lastError = "未知错误"
+        var lastError = L10n.text("未知错误")
         for attempt in 1...policy.maxAttempts {
             guard generation == reconnectGeneration, !Task.isCancelled else { return }
             status.state = .reconnecting(attempt: attempt, maxAttempts: policy.maxAttempts)
@@ -1383,12 +1384,12 @@ final class AppModel: ObservableObject {
                 guard generation == reconnectGeneration else { return }
                 var recovered = cam.status
                 recovered.state = .recovered
-                recovered.notes = ["ICC 会话已恢复"]
+                recovered.notes = [L10n.text("ICC 会话已恢复")]
                 status = recovered
                 liveViewStarted = false
                 lastLiveErrorText = ""
-                appendLog("ICC 会话已恢复", level: .info)
-                showToast("相机连接已恢复", kind: .success)
+                appendLog(L10n.text("ICC 会话已恢复"), level: .info)
+                showToast(L10n.text("相机连接已恢复"), kind: .success)
                 if let restore = pendingRestore {
                     pendingRestore = nil
                     try? await cam.apply(restore)
@@ -1405,18 +1406,18 @@ final class AppModel: ObservableObject {
                 }
                 return
             } catch {
-                lastError = String(describing: error)
-                appendLog("重连失败 \(attempt)/\(policy.maxAttempts)：\(lastError)",
+                lastError = NikonCamera.connectionMessage(for: error)
+                appendLog(L10n.text("重连失败 %@/%@：%@", attempt, policy.maxAttempts, lastError),
                           level: .warning)
             }
         }
         guard generation == reconnectGeneration else { return }
         var failed = status
-        failed.state = .error("ICC 重连失败")
-        failed.notes = ["已停止重试：\(lastError)"]
+        failed.state = .error(L10n.text("ICC 重连失败"))
+        failed.notes = [L10n.text("已停止重试：%@", lastError)]
         status = failed
-        appendLog("ICC 重连失败，停止重试：\(lastError)", level: .error)
-        showToast("相机重连失败：\(lastError)", kind: .error)
+        appendLog(L10n.text("ICC 重连失败，停止重试：%@", lastError), level: .error)
+        showToast(L10n.text("相机重连失败：%@", lastError), kind: .error)
         reconnectTask = nil
         updateActivity()
     }
@@ -1446,14 +1447,14 @@ final class AppModel: ObservableObject {
                 || Date().timeIntervalSince(lastLiveErrorAt) > 5 else { return }
         lastLiveErrorText = text
         lastLiveErrorAt = Date()
-        appendLog("取景错误：\(text)", level: .warning)
+        appendLog(L10n.text("取景错误：%@", text), level: .warning)
     }
 
     // MARK: - Sequence
 
     func startSequence() {
         guard !findStarMode else {
-            showToast("先退出找星模式", kind: .warning)
+            showToast(L10n.text("先退出找星模式"), kind: .warning)
             return
         }
         guard let camera, runner == nil, !groupRunning, !focus.isRunning else { return }
@@ -1478,7 +1479,7 @@ final class AppModel: ObservableObject {
         let runner = SequenceRunner(camera: camera, plan: plan,
                                     sequenceStart: sequenceStart)
         self.runner = runner
-        appendLog("开始计划：\(plan.summary)")
+        appendLog(L10n.text("开始计划：%@", plan.summary))
 
         runnerTask = Task { [weak self] in
             guard let self else { return }
@@ -1534,24 +1535,24 @@ final class AppModel: ObservableObject {
             }
         case .captured(let record):
             var annotated = record
-            if let group = activeGroupName {
-                annotated.note = (record.note ?? "") + "，分组 \(group)"
-                annotated.qualityGroup = group
+            if let group = activeGroup {
+                annotated.note = (record.note ?? "") + L10n.text("，分组 %@", group.displayName)
+                annotated.qualityGroup = group.name
             }
             addRecord(annotated, role: .light)
             enqueueAnalysis(annotated)
         case .failed(let index, let message):
-            appendLog("第 \(index + 1) 张失败：\(message)", level: .error)
+            appendLog(L10n.text("第 %@ 张失败：%@", index + 1, message), level: .error)
         case .finished(let progress):
             self.progress = progress
-            appendLog("计划结束：\(progress.message)", level: progress.phase == .failed ? .error : .info)
+            appendLog(L10n.text("计划结束：%@", progress.message), level: progress.phase == .failed ? .error : .info)
             presetStore.saveLastPlan(plan)
         }
     }
 
     func captureOnce() {
         guard !findStarMode else {
-            showToast("先退出找星模式", kind: .warning)
+            showToast(L10n.text("先退出找星模式"), kind: .warning)
             return
         }
         guard let camera, !isSingleShot, !isRunning, !darkCollecting, !focus.isRunning else { return }
@@ -1566,10 +1567,10 @@ final class AppModel: ObservableObject {
                 let record = try await camera.capture(sequence: sequenceCounter)
                 addRecord(record, role: .trial)
                 enqueueAnalysis(record)
-                appendLog("试拍完成：\(record.displayName)")
+                appendLog(L10n.text("试拍完成：%@", record.displayName))
             } catch {
-                appendLog("试拍失败：\(error)", level: .error)
-                showToast("试拍失败：\(error)", kind: .error)
+                appendLog(L10n.text("试拍失败：%@", error), level: .error)
+                showToast(L10n.text("试拍失败：%@", error), kind: .error)
             }
         }
     }
@@ -1634,7 +1635,7 @@ final class AppModel: ObservableObject {
     }
 
     nonisolated private static func darkLabel(_ meta: MasterDarkMeta) -> String {
-        String(format: "暗场 ISO %d / %@ / %d 帧", meta.iso,
+        String(format: L10n.text("暗场 ISO %d / %@ / %d 帧"), meta.iso,
                CapturePlan.formatDuration(meta.exposureSeconds), meta.frameCount)
     }
 
@@ -1683,12 +1684,12 @@ final class AppModel: ObservableObject {
                     runAutoFocus()
                 } else if quality.autoPause {
                     pauseSequence()
-                    showToast(text + "，已暂停", kind: .warning)
+                    showToast(text + L10n.text("，已暂停"), kind: .warning)
                 }
             }
             if let target = quality.qualifiedTarget, quality.qualified >= target {
                 pauseSequence()
-                showToast("合格 \(target) 张，已暂停", kind: .success)
+                showToast(L10n.text("合格 %@ 张，已暂停", target), kind: .success)
                 quality.qualifiedTarget = nil
             }
         }
@@ -1722,7 +1723,7 @@ final class AppModel: ObservableObject {
                 stack.accepted = 1
                 stack.totalExposure = record.settings.exposureSeconds
                 stack.lastReason = nil
-                appendLog("星轨参考帧已建立")
+                appendLog(L10n.text("星轨参考帧已建立"))
             }
             return
         }
@@ -1736,7 +1737,7 @@ final class AppModel: ObservableObject {
             stacker = LiveStacker(reference: luma, maxWidth: 1000)
             stack.accepted = 1
             stack.coverage = 1
-            appendLog("叠加参考帧已建立")
+            appendLog(L10n.text("叠加参考帧已建立"))
         }
     }
 
@@ -1795,7 +1796,7 @@ final class AppModel: ObservableObject {
             renderAnalysis(from: luma, record: record)
         } else {
             analysisPreview = record.preview
-            analysisNote = "正在载入 \(record.displayName)…"
+            analysisNote = L10n.text("正在载入 %@…", record.displayName)
             loadAnalysis(for: record)
         }
     }
@@ -1839,7 +1840,7 @@ final class AppModel: ObservableObject {
                     self.renderAnalysis(from: luma, record: self.records[index])
                 } else {
                     self.analysisPreview = self.records[index].preview
-                    self.analysisNote = "无法解码该文件的分析数据"
+                    self.analysisNote = L10n.text("无法解码该文件的分析数据")
                 }
             }
         }
@@ -1859,7 +1860,7 @@ final class AppModel: ObservableObject {
                     scaled.y = star.y / Double(detection.height)
                     return scaled
                 }
-            analysisNote = "全图 \(source.width)×\(source.height)"
+            analysisNote = L10n.text("全图 %@×%@", source.width, source.height)
             histogram = AppModel.histogram(of: small, bins: 64)
         case .center:
             let rect = AppModel.nativeCropRect(for: .center,
@@ -1869,7 +1870,7 @@ final class AppModel: ObservableObject {
                 analysisPreview = crop.displayImage()
                 analysisMeasurement = StarDetector.measure(in: crop)
                 analysisStars = normalized(StarDetector.detect(in: crop, maxStars: 100), in: crop)
-                analysisNote = "中心裁切 \(crop.width)×\(crop.height)"
+                analysisNote = L10n.text("中心裁切 %@×%@", crop.width, crop.height)
                 histogram = AppModel.histogram(of: crop, bins: 64)
             }
         case .hundred:
@@ -1880,11 +1881,11 @@ final class AppModel: ObservableObject {
                 analysisPreview = crop.displayImage()
                 analysisMeasurement = StarDetector.measure(in: crop)
                 analysisStars = normalized(StarDetector.detect(in: crop, maxStars: 120), in: crop)
-                analysisNote = "1:1 裁切 \(crop.width)×\(crop.height) 像素"
+                analysisNote = L10n.text("1:1 裁切 %@×%@ 像素", crop.width, crop.height)
                 histogram = AppModel.histogram(of: crop, bins: 64)
             }
         case .corners:
-            let labels = ["左上", "右上", "左下", "右下"]
+            let labels = [L10n.text("左上"), L10n.text("右上"), L10n.text("左下"), L10n.text("右下")]
             let rects = AppModel.cornerCrops(width: source.width, height: source.height)
             var images: [CGImage] = []
             var metrics: [String: Double] = [:]
@@ -1900,7 +1901,7 @@ final class AppModel: ObservableObject {
                 medianFWHM: metrics.values.sorted().dropFirst(metrics.count / 2).first ?? 0,
                 starCount: metrics.count, medianEccentricity: 0)
             analysisStars = []
-            analysisNote = "四角裁切，各 \(rects.first.map { Int($0.width) } ?? 0)px"
+            analysisNote = L10n.text("四角裁切，各 %@px", rects.first.map { Int($0.width) } ?? 0)
             histogram = AppModel.histogram(of: source.downsampled(maxWidth: 800), bins: 64)
         }
         _ = record
@@ -1926,25 +1927,25 @@ final class AppModel: ObservableObject {
         Task {
             do {
                 try await camera.focusDrive(direction: direction, steps: steps)
-                appendLog("手动对焦：\(direction == .one ? "方向 1" : "方向 2") \(steps) 步")
+                appendLog(L10n.text("手动对焦：%@ %@ 步", direction == .one ? L10n.text("方向 1") : L10n.text("方向 2"), steps))
             } catch {
-                showToast("对焦失败：\(error)", kind: .error)
+                showToast(L10n.text("对焦失败：%@", error), kind: .error)
             }
         }
     }
 
     func runAutoFocus() {
         guard !findStarMode else {
-            showToast("退出找星模式后再运行自动对焦", kind: .warning)
+            showToast(L10n.text("退出找星模式后再运行自动对焦"), kind: .warning)
             return
         }
         guard let camera, !focus.isRunning else { return }
         guard status.capabilities.contains(.manualFocusDrive) else {
-            showToast("当前设备不支持电子对焦", kind: .warning)
+            showToast(L10n.text("当前设备不支持电子对焦"), kind: .warning)
             return
         }
         focusCancel.clear()
-        focus = FocusUIState(isRunning: true, samples: [], message: "准备对焦…",
+        focus = FocusUIState(isRunning: true, samples: [], message: L10n.text("准备对焦…"),
                              result: nil, currentFWHM: nil)
         let savedSettings = plan.settings
         let focusSettings = ExposureSettings(iso: max(plan.iso, 1600),
@@ -2006,7 +2007,7 @@ final class AppModel: ObservableObject {
                             guard let self else { return }
                             self.focus.samples.append(sample)
                             self.focus.currentFWHM = sample.measurement.medianFWHM
-                            self.focus.message = String(format: "步数 %+d，FWHM %.2f",
+                            self.focus.message = String(format: L10n.text("步数 %+d，FWHM %.2f"),
                                                         sample.relativeSteps,
                                                         sample.measurement.medianFWHM)
                         }
@@ -2021,7 +2022,7 @@ final class AppModel: ObservableObject {
                 self.finishFocus(result, camera: camera, settings: savedSettings)
             } catch {
                 self.focus.isRunning = false
-                self.focus.message = "对焦失败：\(error)"
+                self.focus.message = L10n.text("对焦失败：%@", error)
                 self.appendLog(focus.message, level: .error)
                 self.suppressLive = false
                 self.refreshLiveLoop()
@@ -2034,7 +2035,7 @@ final class AppModel: ObservableObject {
         focus.isRunning = false
         focus.result = result
         focus.message = result.message
-        appendLog("自动对焦：\(result.message)",
+        appendLog(L10n.text("自动对焦：%@", result.message),
                   level: result.status == .confirmed ? .info : .warning)
         // Verification capture at the real shooting settings.
         Task {
@@ -2043,11 +2044,11 @@ final class AppModel: ObservableObject {
                 sequenceCounter += 1000
                 let record = try await camera.capture(sequence: sequenceCounter)
                 var verified = record
-                verified.note = (record.note ?? "") + "，对焦验证"
+                verified.note = (record.note ?? "") + L10n.text("，对焦验证")
                 addRecord(verified, role: .focusVerify)
                 enqueueAnalysis(verified)
             } catch {
-                appendLog("对焦验证拍摄失败：\(error)", level: .warning)
+                appendLog(L10n.text("对焦验证拍摄失败：%@", error), level: .warning)
             }
             suppressLive = false
             refreshLiveLoop()
@@ -2060,7 +2061,7 @@ final class AppModel: ObservableObject {
         guard let camera, !isRunning, !focusBracketRunning, !findStarMode else { return }
         guard status.state.isConnected,
               status.capabilities.contains(.manualFocusDrive) else {
-            showToast("当前设备不支持电子对焦", kind: .warning)
+            showToast(L10n.text("当前设备不支持电子对焦"), kind: .warning)
             return
         }
         focusBracketRunning = true
@@ -2080,7 +2081,7 @@ final class AppModel: ObservableObject {
                     sequenceCounter += 1
                     let record = try await camera.capture(sequence: sequenceCounter)
                     var annotated = record
-                    annotated.note = (record.note ?? "") + String(format: "，焦点包围 %+d 步", offset)
+                    annotated.note = (record.note ?? "") + String(format: L10n.text("，焦点包围 %+d 步"), offset)
                     addRecord(annotated, role: .focusBracket)
                     enqueueAnalysis(annotated)
                 }
@@ -2088,11 +2089,11 @@ final class AppModel: ObservableObject {
                     let direction: FocusDirection = moved > 0 ? .two : .one
                     try await camera.focusDrive(direction: direction, steps: abs(moved))
                 }
-                appendLog("焦点包围完成：−40 / 0 / +40 步，已回到起始位置")
-                showToast("焦点包围完成（3 张）", kind: .success)
+                appendLog(L10n.text("焦点包围完成：−40 / 0 / +40 步，已回到起始位置"))
+                showToast(L10n.text("焦点包围完成（3 张）"), kind: .success)
             } catch {
-                appendLog("焦点包围失败：\(error)", level: .error)
-                showToast("焦点包围失败：\(error)", kind: .error)
+                appendLog(L10n.text("焦点包围失败：%@", error), level: .error)
+                showToast(L10n.text("焦点包围失败：%@", error), kind: .error)
             }
         }
     }
@@ -2117,7 +2118,7 @@ final class AppModel: ObservableObject {
 
     private func runTrial(candidates: [(String, Double, Double?)], camera: CameraDevice) {
         guard !findStarMode else {
-            showToast("先退出找星模式", kind: .warning)
+            showToast(L10n.text("先退出找星模式"), kind: .warning)
             return
         }
         isTrialRunning = true
@@ -2159,12 +2160,12 @@ final class AppModel: ObservableObject {
                     persisted.metrics = metrics
                     persistFrame(persisted, role: .trial)
                 } catch {
-                    appendLog("试拍 \(label) 失败：\(error)", level: .warning)
+                    appendLog(L10n.text("试拍 %@ 失败：%@", label, error), level: .warning)
                 }
             }
             try? await camera.apply(original)
             markRecommendedTrial()
-            appendLog("参数试拍完成：\(trialCandidates.count) 个候选")
+            appendLog(L10n.text("参数试拍完成：%@ 个候选", trialCandidates.count))
         }
     }
 
@@ -2211,7 +2212,7 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 self.meteorCandidates = found
                 self.meteorScanning = false
-                self.appendLog("流星候选扫描：\(found.count) 个（候选，需人工复查）",
+                self.appendLog(L10n.text("发现 %@ 条疑似流星轨迹，可在照片中查看", found.count),
                                level: found.isEmpty ? .info : .warning)
             }
         }
@@ -2219,7 +2220,7 @@ final class AppModel: ObservableObject {
 
     func saveLensProfile() {
         guard !trialCandidates.isEmpty else {
-            showToast("还没有试拍候选", kind: .warning)
+            showToast(L10n.text("还没有试拍候选"), kind: .warning)
             return
         }
         let trials = trialCandidates.map { candidate in
@@ -2232,23 +2233,23 @@ final class AppModel: ObservableObject {
                         saturatedFraction: candidate.metrics?.saturatedFraction,
                         eccentricity: candidate.metrics?.medianEccentricity)
         }
-        let lens = status.lens ?? (sourceKind == .simulator ? "SIM 35mm f/2.8" : "未记录镜头")
+        let lens = status.lens ?? (sourceKind == .simulator ? "SIM 35mm f/2.8" : L10n.text("未记录镜头"))
         let entries = lensStore.add(lensName: lens,
                                     cameraModel: status.model,
                                     iso: plan.iso,
-                                    note: "现场参数试拍，条件不可跨夜外推",
+                                    note: L10n.text("本组试拍的镜头和曝光设置"),
                                     trials: trials)
         lensProfileCount = entries.count
-        showToast("已保存到镜头档案（\(lens)）", kind: .success)
-        appendLog("镜头档案新增一条：\(lens)，\(trials.count) 个候选")
+        showToast(L10n.text("已保存到镜头档案（%@）", lens), kind: .success)
+        appendLog(L10n.text("镜头档案新增一条：%@，%@ 个候选", lens, trials.count))
     }
 
     func adoptTrial(_ candidate: TrialCandidate) {
         plan.exposureSeconds = candidate.exposureSeconds
         if let aperture = candidate.aperture { plan.aperture = aperture }
         presetStore.saveLastPlan(plan)
-        appendLog("采用试拍参数：\(candidate.label)", level: .info)
-        showToast("已采用 \(candidate.label)", kind: .success)
+        appendLog(L10n.text("采用试拍参数：%@", candidate.label), level: .info)
+        showToast(L10n.text("已采用 %@", candidate.label), kind: .success)
     }
 
     // MARK: - Shoot groups
@@ -2269,13 +2270,13 @@ final class AppModel: ObservableObject {
         guard let index = groups.firstIndex(where: { $0.id == id }) else { return }
         groups[index].plan = plan
         persistGroups()
-        appendLog("分组「\(groups[index].name)」已用当前计划更新")
+        appendLog(L10n.text("分组「%@」已用当前计划更新", groups[index].displayName))
     }
 
     func loadGroupPlan(_ group: ShootGroup) {
         plan = group.plan
-        presetName = group.name
-        appendLog("载入分组计划：\(group.name)")
+        presetName = group.displayName
+        appendLog(L10n.text("载入分组计划：%@", group.displayName))
     }
 
     func groupSummary(_ group: ShootGroup) -> String {
@@ -2283,10 +2284,10 @@ final class AppModel: ObservableObject {
         var parts: [String] = []
         let countText: String
         switch p.end {
-        case .count(let count): countText = "\(count) 张"
+        case .count(let count): countText = L10n.text("%@ 张", count)
         case .duration(let seconds): countText = CapturePlan.formatDuration(seconds)
-        case .at: countText = "定时结束"
-        case .manual: countText = "手动结束"
+        case .at: countText = L10n.text("定时结束")
+        case .manual: countText = L10n.text("手动结束")
         }
         parts.append("\(CapturePlan.formatDuration(p.exposureSeconds)) × \(countText)")
         parts.append("ISO \(p.iso)")
@@ -2294,7 +2295,7 @@ final class AppModel: ObservableObject {
             parts.append(String(format: "f/%.1f", aperture))
         }
         if group.focusOffsetSteps != 0 {
-            parts.append(String(format: "对焦 %+d", group.focusOffsetSteps))
+            parts.append(String(format: L10n.text("对焦 %+d"), group.focusOffsetSteps))
         }
         return parts.joined(separator: "   ")
     }
@@ -2303,7 +2304,7 @@ final class AppModel: ObservableObject {
         guard let camera, !isRunning, !findStarMode else { return }
         let runnable = groups.filter { $0.enabled }
         guard !runnable.isEmpty else {
-            showToast("没有启用的分组", kind: .warning)
+            showToast(L10n.text("没有启用的分组"), kind: .warning)
             return
         }
         beginSessionForNewRun()
@@ -2331,13 +2332,13 @@ final class AppModel: ObservableObject {
                     self.groupTotals.failed += self.progress.failed
                     self.progress = SequenceProgress()
                     self.progress.phase = .waitingToStart
-                    self.progress.message = "下一组：\(group.name)"
+                    self.progress.message = L10n.text("下一组：%@", group.displayName)
                 }
-                self.activeGroupName = group.name
+                self.activeGroup = group
                 self.activeGroupIndex = self.groups.firstIndex(where: { $0.id == group.id })
                 self.qualityEngines[group.name] = QualityEngine()
                 self.quality.lastAction = ""
-                self.appendLog("分组开始：\(group.name)")
+                self.appendLog(L10n.text("分组开始：%@", group.displayName))
 
                 if group.focusOffsetSteps != 0 {
                     let direction: FocusDirection = group.focusOffsetSteps > 0 ? .one : .two
@@ -2346,7 +2347,7 @@ final class AppModel: ObservableObject {
                                                     steps: abs(group.focusOffsetSteps))
                         netFocus += group.focusOffsetSteps
                     } catch {
-                        self.appendLog("分组对焦失败：\(error)", level: .warning)
+                        self.appendLog(L10n.text("分组对焦失败：%@", error), level: .warning)
                     }
                 }
 
@@ -2373,12 +2374,12 @@ final class AppModel: ObservableObject {
             self.groupTotals.failed += self.progress.failed
             self.runner = nil
             self.groupRunning = false
-            self.activeGroupName = nil
+            self.activeGroup = nil
             self.activeGroupIndex = nil
             self.suppressLive = false
             self.liveFrozen = false
             self.refreshLiveLoop()
-            self.appendLog(self.groupStopRequested ? "分组拍摄已停止" : "分组拍摄结束")
+            self.appendLog(self.groupStopRequested ? L10n.text("分组拍摄已停止") : L10n.text("分组拍摄结束"))
         }
     }
 
@@ -2396,7 +2397,7 @@ final class AppModel: ObservableObject {
 
     func runAutoExposure() {
         guard let camera, canRunAutoExposure else {
-            showToast("当前状态不能运行自动曝光", kind: .warning)
+            showToast(L10n.text("当前状态不能运行自动曝光"), kind: .warning)
             return
         }
         let initial = plan.settings
@@ -2404,16 +2405,16 @@ final class AppModel: ObservableObject {
         let cancel = autoCancel
         cancel.clear()
         autoExposure = AutoExposureUIState(isRunning: true, step: 0,
-                                           message: "准备", samples: [], result: nil)
+                                           message: L10n.text("准备"), samples: [], result: nil)
         suppressLive = true
         liveTask?.cancel()
         liveTask = nil
-        appendLog("星空自动曝光：开始")
+        appendLog(L10n.text("星空自动曝光：开始"))
         let runner = AutoExposureRunner()
         autoTask = Task { [weak self] in
             guard let self else { return }
             let probe: @Sendable (ExposureSettings) async throws -> AutoExposureSample = { settings in
-                if cancel.isSet { throw CameraError.unsupported("已取消") }
+                if cancel.isSet { throw CameraError.unsupported(L10n.text("已取消")) }
                 try await camera.apply(settings)
                 let record = try await camera.capture(sequence: box.nextSequence())
                 if box.focalLength == nil, let url = record.fileURL,
@@ -2425,7 +2426,7 @@ final class AppModel: ObservableObject {
                 if luma == nil, let url = record.fileURL {
                     luma = ImageLoader.luma(url: url, maxWidth: 2200)
                 }
-                guard let luma else { throw CameraError.captureFailed("无像素") }
+                guard let luma else { throw CameraError.captureFailed(L10n.text("无像素")) }
                 return AutoExposureSample(settings: settings,
                                           metrics: FrameAnalyzer.metrics(luma),
                                           maxValue: luma.maxValue)
@@ -2439,7 +2440,7 @@ final class AppModel: ObservableObject {
                         self.autoExposure.samples.append(sample)
                         self.autoExposure.step += 1
                         self.autoExposure.message = String(
-                            format: "第 %d 步：ISO %d，%@，背景 %.0f，星点 %d，偏心 %.2f",
+                            format: L10n.text("第 %d 步：ISO %d，%@，背景 %.0f，星点 %d，偏心 %.2f"),
                             self.autoExposure.step, sample.settings.iso,
                             CapturePlan.formatDuration(sample.settings.exposureSeconds),
                             sample.metrics.background, sample.metrics.starCount,
@@ -2454,7 +2455,7 @@ final class AppModel: ObservableObject {
 
     func cancelAutoExposure() {
         autoCancel.set()
-        autoExposure.message = "正在取消…"
+        autoExposure.message = L10n.text("正在取消…")
     }
 
     private func finishAutoExposure(_ result: AutoExposureResult, focalLength: Double?) {
@@ -2467,15 +2468,15 @@ final class AppModel: ObservableObject {
             plan.exposureSeconds = result.settings.exposureSeconds
             if let aperture = result.settings.aperture { plan.aperture = aperture }
             presetStore.saveLastPlan(plan)
-            appendLog("自动曝光已写回：\(result.message)")
-            showToast("自动曝光：ISO \(plan.iso) / \(CapturePlan.formatDuration(plan.exposureSeconds))",
+            appendLog(L10n.text("自动曝光已写回：%@", result.message))
+            showToast(L10n.text("自动曝光：ISO %@ / %@", plan.iso, CapturePlan.formatDuration(plan.exposureSeconds)),
                       kind: .success)
             if let camera {
                 Task { try? await camera.apply(result.settings) }
             }
         } else {
-            appendLog("自动曝光未确认：\(result.status.displayText)", level: .warning)
-            showToast("自动曝光未确认：\(result.status.displayText)", kind: .warning)
+            appendLog(L10n.text("自动曝光未确认：%@", result.status.displayText), level: .warning)
+            showToast(L10n.text("自动曝光未确认：%@", result.status.displayText), kind: .warning)
         }
         suppressLive = false
         refreshLiveLoop()
@@ -2491,14 +2492,14 @@ final class AppModel: ObservableObject {
     }
 
     var darkSummary: String {
-        guard let meta = darkMetas.first else { return "尚未采集" }
-        return String(format: "ISO %d / %@ / %d 帧", meta.iso,
+        guard let meta = darkMetas.first else { return L10n.text("尚未采集") }
+        return String(format: L10n.text("ISO %d / %@ / %d 帧"), meta.iso,
                       CapturePlan.formatDuration(meta.exposureSeconds), meta.frameCount)
     }
 
     func collectDarks() {
         guard let camera, canCollectDarks else {
-            showToast("当前状态不能采集暗场", kind: .warning)
+            showToast(L10n.text("当前状态不能采集暗场"), kind: .warning)
             return
         }
         let settings = ExposureSettings(iso: plan.iso,
@@ -2512,13 +2513,13 @@ final class AppModel: ObservableObject {
         darkRunID = runID
         darkCollecting = true
         darkProgress = 0
-        darkStatus = "准备"
+        darkStatus = L10n.text("准备")
         suppressLive = true
         liveTask?.cancel()
         liveTask = nil
         simulator?.setLensCovered(true)
-        appendLog("暗场采集：盖住镜头盖，\(target) 张，ISO \(settings.iso)，\(CapturePlan.formatDuration(settings.exposureSeconds))")
-        showToast("暗场采集：盖住镜头盖，\(target) 张", kind: .info)
+        appendLog(L10n.text("暗场采集：盖住镜头盖，%@ 张，ISO %@，%@", target, settings.iso, CapturePlan.formatDuration(settings.exposureSeconds)))
+        showToast(L10n.text("暗场采集：盖住镜头盖，%@ 张", target), kind: .info)
 
         Task { [weak self] in
             guard let self else { return }
@@ -2527,7 +2528,7 @@ final class AppModel: ObservableObject {
                 try await camera.apply(settings)
                 for index in 0..<target {
                     if self.darkRunID != runID { break }
-                    self.darkStatus = "曝光 \(index + 1)/\(target)"
+                    self.darkStatus = L10n.text("曝光 %@/%@", index + 1, target)
                     let record = try await camera.capture(sequence: -1000 - index)
                     let luma: LumaImage?
                     if let analysis = record.analysisLuma {
@@ -2537,7 +2538,7 @@ final class AppModel: ObservableObject {
                     } else {
                         luma = nil
                     }
-                    guard let luma else { throw CameraError.downloadFailed("暗场帧无像素") }
+                    guard let luma else { throw CameraError.downloadFailed(L10n.text("暗场帧无像素")) }
                     try accumulator.add(luma, settings: settings)
                     self.darkProgress = index + 1
                 }
@@ -2545,33 +2546,33 @@ final class AppModel: ObservableObject {
                 // main actor together with the master write.
                 let saved = try await Task.detached(priority: .userInitiated) {
                     guard let master = accumulator.build(settings: settings, source: source) else {
-                        throw CameraError.captureFailed("暗场累加失败")
+                        throw CameraError.captureFailed(L10n.text("暗场累加失败"))
                     }
                     return try library.save(master)
                 }.value
                 self.darkMetas = library.all()
                 if saved.isUsable {
                     self.darkEnabled = true
-                    self.darkStatus = String(format: "完成：ISO %d / %@ / %d 帧", saved.iso,
+                    self.darkStatus = String(format: L10n.text("完成：ISO %d / %@ / %d 帧"), saved.iso,
                                              CapturePlan.formatDuration(saved.exposureSeconds),
                                              saved.frameCount)
-                    self.appendLog("暗场库新增：\(self.darkStatus)")
-                    self.showToast("暗场完成（\(saved.frameCount) 帧）", kind: .success)
+                    self.appendLog(L10n.text("暗场库新增：%@", self.darkStatus))
+                    self.showToast(L10n.text("暗场完成（%@ 帧）", saved.frameCount), kind: .success)
                 } else {
                     self.darkEnabled = false
-                    self.darkStatus = String(format: "分布异常：ISO %d / %@ / %d 帧，未启用",
+                    self.darkStatus = String(format: L10n.text("分布异常：ISO %d / %@ / %d 帧，未启用"),
                                              saved.iso,
                                              CapturePlan.formatDuration(saved.exposureSeconds),
                                              saved.frameCount)
-                    self.appendLog("暗场分布异常，未启用：Core Image 解码的 NEF 暗场不可靠",
+                    self.appendLog(L10n.text("暗场分布异常，未启用：Core Image 解码的 NEF 暗场不可靠"),
                                    level: .warning)
-                    self.showToast("暗场已保存。像素分布异常，已跳过这组暗场", kind: .warning)
+                    self.showToast(L10n.text("暗场已保存。像素分布异常，已跳过这组暗场"), kind: .warning)
                 }
                 self.resetQualityAfterDarkChange()
             } catch {
-                self.darkStatus = "失败"
-                self.appendLog("暗场采集失败：\(error)", level: .error)
-                self.showToast("暗场采集失败：\(error)", kind: .error)
+                self.darkStatus = L10n.text("失败")
+                self.appendLog(L10n.text("暗场采集失败：%@", error), level: .error)
+                self.showToast(L10n.text("暗场采集失败：%@", error), kind: .error)
             }
             self.simulator?.setLensCovered(false)
             try? await camera.apply(self.plan.settings)
@@ -2586,7 +2587,7 @@ final class AppModel: ObservableObject {
         guard darkEnabled != enabled else { return }
         darkEnabled = enabled
         resetQualityAfterDarkChange()
-        appendLog(enabled ? "暗场减除已启用" : "暗场减除已关闭")
+        appendLog(enabled ? L10n.text("暗场减除已启用") : L10n.text("暗场减除已关闭"))
     }
 
     func refreshDarks() {
@@ -2596,7 +2597,7 @@ final class AppModel: ObservableObject {
     func deleteDark(_ meta: MasterDarkMeta) {
         guard darkLibrary.delete(id: meta.id) else { return }
         darkMetas = darkLibrary.all()
-        appendLog("已删除暗场 ISO \(meta.iso) / \(CapturePlan.formatDuration(meta.exposureSeconds))")
+        appendLog(L10n.text("已删除暗场 ISO %@ / %@", meta.iso, CapturePlan.formatDuration(meta.exposureSeconds)))
     }
 
     private func resetQualityAfterDarkChange() {
@@ -2621,18 +2622,18 @@ final class AppModel: ObservableObject {
 
     func setCameraScreen(off: Bool) {
         guard let camera, canControlCameraScreen else {
-            showToast("当前设备不支持关屏控制", kind: .warning)
+            showToast(L10n.text("当前设备不支持关屏控制"), kind: .warning)
             return
         }
         Task {
             do {
                 try await camera.setScreen(on: !off)
                 cameraScreenOff = off
-                appendLog(off ? "已请求关闭相机屏" : "已请求打开相机屏")
-                showToast(off ? "已请求关屏" : "已请求开屏", kind: .info)
+                appendLog(off ? L10n.text("已请求关闭相机屏") : L10n.text("已请求打开相机屏"))
+                showToast(off ? L10n.text("已请求关屏") : L10n.text("已请求开屏"), kind: .info)
             } catch {
-                appendLog("相机屏控制失败：\(error)", level: .warning)
-                showToast("相机屏控制失败：\(error)", kind: .error)
+                appendLog(L10n.text("相机屏控制失败：%@", error), level: .warning)
+                showToast(L10n.text("相机屏控制失败：%@", error), kind: .error)
             }
         }
     }
@@ -2656,13 +2657,13 @@ final class AppModel: ObservableObject {
             sessionInfo = info
             sidecarByFrameID.removeAll()
             sessionFrameCount = 0
-            appendLog("会话目录：\(info.directory.path)")
+            appendLog(L10n.text("会话目录：%@", info.directory.path))
         } catch {
             sessionInfo = nil
             sidecarByFrameID.removeAll()
             sessionFrameCount = 0
-            appendLog("会话目录创建失败：\(error)", level: .error)
-            showToast("会话目录创建失败，照片不会写入会话", kind: .error)
+            appendLog(L10n.text("会话目录创建失败：%@", error), level: .error)
+            showToast(L10n.text("会话目录创建失败，照片不会写入会话"), kind: .error)
         }
     }
 
@@ -2732,7 +2733,7 @@ final class AppModel: ObservableObject {
                 try await operation()
             } catch {
                 await MainActor.run {
-                    self?.appendLog("会话写入失败：\(error)", level: .warning)
+                    self?.appendLog(L10n.text("会话写入失败：%@", error), level: .warning)
                 }
             }
         }
@@ -2740,7 +2741,7 @@ final class AppModel: ObservableObject {
 
     func exportStackImage() {
         guard sessionInfo != nil else {
-            showToast("先开始一次拍摄", kind: .warning)
+            showToast(L10n.text("先开始一次拍摄"), kind: .warning)
             return
         }
         let image: LumaImage?
@@ -2750,7 +2751,7 @@ final class AppModel: ObservableObject {
             image = stacker?.currentMean()
         }
         guard let image else {
-            showToast("还没有可导出的叠加图", kind: .warning)
+            showToast(L10n.text("还没有可导出的叠加图"), kind: .warning)
             return
         }
         let name = stack.mode == .trails ? "stack-trails" : "stack-mean"
@@ -2761,15 +2762,15 @@ final class AppModel: ObservableObject {
             await MainActor.run {
                 guard let self else { return }
                 self.sessionLastExport = urls.tiff
-                self.appendLog("已导出\(isTrails ? "星轨" : "叠加")：\(urls.tiff.lastPathComponent)")
-                self.showToast("已导出 \(urls.tiff.lastPathComponent)", kind: .success)
+                self.appendLog(L10n.text("已导出%@：%@", isTrails ? L10n.text("星轨") : L10n.text("叠加"), urls.tiff.lastPathComponent))
+                self.showToast(L10n.text("已导出 %@", urls.tiff.lastPathComponent), kind: .success)
             }
         }
     }
 
     func exportSessionReport() {
         guard sessionInfo != nil else {
-            showToast("先开始一次拍摄", kind: .warning)
+            showToast(L10n.text("先开始一次拍摄"), kind: .warning)
             return
         }
         let store = sessionStore
@@ -2778,8 +2779,8 @@ final class AppModel: ObservableObject {
             await MainActor.run {
                 guard let self else { return }
                 self.sessionLastExport = urls.json
-                self.appendLog("会话报告：\(urls.json.lastPathComponent)")
-                self.showToast("报告已写入会话目录", kind: .success)
+                self.appendLog(L10n.text("会话报告：%@", urls.json.lastPathComponent))
+                self.showToast(L10n.text("报告已写入会话目录"), kind: .success)
             }
         }
     }
@@ -2793,7 +2794,7 @@ final class AppModel: ObservableObject {
     /// export the result as auto-stack.tif/png.
     func stackSession() {
         guard let session = sessionInfo else {
-            showToast("先开始一次拍摄", kind: .warning)
+            showToast(L10n.text("先开始一次拍摄"), kind: .warning)
             return
         }
         guard canStackSession else { return }
@@ -2802,19 +2803,19 @@ final class AppModel: ObservableObject {
         let library = darkLibrary
         let darkEnabled = self.darkEnabled
         sessionStack = SessionStackUIState(isRunning: true, processed: 0, total: 0,
-                                           message: "读取会话…")
-        appendLog("自动叠加：读取会话 \(session.name)")
+                                           message: L10n.text("读取会话…"))
+        appendLog(L10n.text("自动叠加：读取会话 %@", session.name))
         Task.detached(priority: .userInitiated) { [weak self] in
             let frames = store.frames(in: directory).filter { $0.role == .light }
             guard frames.count >= 2 else {
                 await MainActor.run {
-                    self?.finishStack(error: "会话里的亮场帧太少（\(frames.count)）")
+                    self?.finishStack(error: L10n.text("会话里的亮场帧太少（%@）", frames.count))
                 }
                 return
             }
             await MainActor.run {
                 self?.sessionStack.total = frames.count
-                self?.sessionStack.message = "解码 0/\(frames.count)"
+                self?.sessionStack.message = L10n.text("解码 0/%@", frames.count)
             }
             let stacker = SessionStacker(maxWidth: 2_000)
             var processed = 0
@@ -2844,11 +2845,11 @@ final class AppModel: ObservableObject {
                 processed += 1
                 await MainActor.run {
                     self?.sessionStack.processed = processed
-                    self?.sessionStack.message = "解码 \(processed)/\(frames.count)"
+                    self?.sessionStack.message = L10n.text("解码 %@/%@", processed, frames.count)
                 }
             }
             guard let result = stacker.result() else {
-                await MainActor.run { self?.finishStack(error: "没有可叠加的帧") }
+                await MainActor.run { self?.finishStack(error: L10n.text("没有可叠加的帧")) }
                 return
             }
             do {
@@ -2858,22 +2859,22 @@ final class AppModel: ObservableObject {
                     self.sessionStack.isRunning = false
                     self.sessionStack.summary = result.summary
                     self.sessionStack.exportURL = urls.tiff
-                    var message = String(format: "叠加 %d 张，拒绝 %d 张，覆盖 %.0f%%",
+                    var message = String(format: L10n.text("叠加 %d 张，拒绝 %d 张，覆盖 %.0f%%"),
                                          result.summary.accepted,
                                          result.summary.rejected,
                                          result.summary.coverage * 100)
                     if decodeFailures > 0 {
-                        message += "，解码失败 \(decodeFailures)"
+                        message += L10n.text("，解码失败 %@", decodeFailures)
                     }
                     if !result.summary.reasonText.isEmpty {
-                        message += "（\(result.summary.reasonText)）"
+                        message += L10n.text("（%@）", result.summary.reasonText)
                     }
                     self.sessionStack.message = message
-                    self.appendLog("自动叠加：\(message)")
-                    self.showToast("已导出 \(urls.tiff.lastPathComponent)", kind: .success)
+                    self.appendLog(L10n.text("自动叠加：%@", message))
+                    self.showToast(L10n.text("已导出 %@", urls.tiff.lastPathComponent), kind: .success)
                 }
             } catch {
-                await MainActor.run { self?.finishStack(error: "导出失败：\(error)") }
+                await MainActor.run { self?.finishStack(error: L10n.text("导出失败：%@", error)) }
             }
         }
     }
@@ -2881,8 +2882,8 @@ final class AppModel: ObservableObject {
     private func finishStack(error: String) {
         sessionStack.isRunning = false
         sessionStack.message = error
-        appendLog("自动叠加失败：\(error)", level: .warning)
-        showToast("自动叠加失败：\(error)", kind: .warning)
+        appendLog(L10n.text("自动叠加失败：%@", error), level: .warning)
+        showToast(L10n.text("自动叠加失败：%@", error), kind: .warning)
     }
 
     // MARK: - Presets
@@ -2890,17 +2891,17 @@ final class AppModel: ObservableObject {
     func savePreset() {
         let name = presetName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            showToast("先给预设起个名字", kind: .warning)
+            showToast(L10n.text("先给预设起个名字"), kind: .warning)
             return
         }
         presets = presetStore.upsert(name: name, plan: plan)
-        showToast("已保存预设「\(name)」", kind: .success)
+        showToast(L10n.text("已保存预设「%@」", name), kind: .success)
     }
 
     func loadPreset(_ preset: CapturePreset) {
         plan = preset.plan
         presetName = preset.name
-        appendLog("载入预设「\(preset.name)」")
+        appendLog(L10n.text("载入预设「%@」", preset.name))
     }
 
     func deletePreset(_ preset: CapturePreset) {
@@ -2912,8 +2913,8 @@ final class AppModel: ObservableObject {
     func setSimulatorCondition(_ condition: SkyCondition) {
         simulatorCondition = condition
         simulator?.setCondition(condition)
-        appendLog("模拟场景：\(condition.displayName)")
-        if simulatorCondition == .noStars { showToast("模拟场景：无星", kind: .info) }
+        appendLog(L10n.text("模拟场景：%@", condition.displayName))
+        if simulatorCondition == .noStars { showToast(L10n.text("模拟场景：无星"), kind: .info) }
     }
 
     func setSimulatorFocus(_ position: Double) {
@@ -2928,7 +2929,7 @@ final class AppModel: ObservableObject {
 
     func injectSimulatorFault(_ fault: SimulatorFault) {
         simulator?.faults.append(fault)
-        appendLog("注入模拟故障")
+        appendLog(L10n.text("注入模拟故障"))
     }
 
     // MARK: - Stacking
@@ -2948,7 +2949,7 @@ final class AppModel: ObservableObject {
         stack.gapCount = 0
         stack.shiftText = "—"
         stack.lastReason = nil
-        appendLog(mode == .trails ? "叠加模式：星轨（最大值）" : "叠加模式：平均")
+        appendLog(mode == .trails ? L10n.text("叠加模式：星轨（最大值）") : L10n.text("叠加模式：平均"))
     }
 
     func toggleStacking(_ enabled: Bool) {
@@ -2958,9 +2959,9 @@ final class AppModel: ObservableObject {
         stackedIDs.removeAll()
         stackImage = nil
         if enabled {
-            appendLog("叠加已开启，下一张照片作为参考")
+            appendLog(L10n.text("叠加已开启，下一张照片作为参考"))
         } else {
-            appendLog("叠加已关闭")
+            appendLog(L10n.text("叠加已关闭"))
         }
     }
 
@@ -2973,7 +2974,7 @@ final class AppModel: ObservableObject {
         let mode = stack.mode
         stack = StackUIState(enabled: enabled)
         stack.mode = mode
-        appendLog("叠加已重置")
+        appendLog(L10n.text("叠加已重置"))
     }
 
     // MARK: - Logs / toast

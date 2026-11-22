@@ -9,8 +9,8 @@ public struct ExposureRamp: Codable, Equatable, Sendable {
 
         public var displayName: String {
             switch self {
-            case .linear: return "线性"
-            case .geometric: return "等比"
+            case .linear: return L10n.text("线性")
+            case .geometric: return L10n.text("等比")
             }
         }
     }
@@ -69,8 +69,8 @@ public struct CapturePlan: Codable, Equatable, Sendable {
 
         public var displayName: String {
             switch self {
-            case .shift: return "顺延后续"
-            case .skip: return "跳过时间点"
+            case .shift: return L10n.text("顺延后续")
+            case .skip: return L10n.text("跳过时间点")
             }
         }
     }
@@ -143,51 +143,51 @@ public struct CapturePlan: Codable, Equatable, Sendable {
     public var startText: String {
         switch start {
         case .immediate:
-            return "立即开始"
+            return L10n.text("立即开始")
         case .delay(let seconds):
-            return "\(Self.formatDuration(seconds))后开始"
+            return L10n.text("%@后开始", Self.formatDuration(seconds))
         case .at(let date):
-            return "在 \(Self.timeFormatter.string(from: date)) 开始"
+            return L10n.text("在 %@ 开始", Self.timeFormatter.string(from: date))
         }
     }
 
     public var intervalText: String {
         switch interval {
         case .fixedStart(let seconds):
-            return "固定间隔 \(Self.formatDuration(seconds))（按开始时刻）"
+            return L10n.text("固定间隔 %@（按开始时刻）", Self.formatDuration(seconds))
         case .afterExposure(let seconds):
-            return "曝光结束后等待 \(Self.formatDuration(seconds))"
+            return L10n.text("曝光结束后等待 %@", Self.formatDuration(seconds))
         }
     }
 
     public var endText: String {
         switch end {
         case .count(let count):
-            return "拍满 \(count) 张停止"
+            return L10n.text("拍满 %@ 张停止", count)
         case .duration(let seconds):
-            return "持续 \(Self.formatDuration(seconds))"
+            return L10n.text("持续 %@", Self.formatDuration(seconds))
         case .at(let date):
-            return "到 \(Self.timeFormatter.string(from: date)) 停止"
+            return L10n.text("到 %@ 停止", Self.timeFormatter.string(from: date))
         case .manual:
-            return "手动停止"
+            return L10n.text("手动停止")
         }
     }
 
     public var summary: String {
         let exposureText = ramp.map {
-            "曝光 \(Self.formatDuration($0.startSeconds)) → \(Self.formatDuration($0.endSeconds))（\($0.curve.displayName)渐变）"
-        } ?? "每张曝光 \(Self.formatDuration(exposureSeconds))"
-        return "\(startText)，\(exposureText)，\(intervalText)，\(endText)。ISO \(iso)\(aperture.map { String(format: "，f/%.1f", $0) } ?? "")，\(compression.displayName)"
+            L10n.text("曝光 %@ → %@（%@渐变）", Self.formatDuration($0.startSeconds), Self.formatDuration($0.endSeconds), $0.curve.displayName)
+        } ?? L10n.text("每张曝光 %@", Self.formatDuration(exposureSeconds))
+        return L10n.text("%@，%@，%@，%@。ISO %@%@，%@", startText, exposureText, intervalText, endText, iso, aperture.map { String(format: L10n.text("，f/%.1f"), $0) } ?? "", compression.displayName)
     }
 
     public static func formatDuration(_ seconds: Double) -> String {
         if seconds < 1 {
-            return String(format: "%.2f 秒", seconds)
+            return String(format: L10n.text("%.2f 秒"), seconds)
         }
         if seconds.rounded() == seconds {
-            return String(format: "%.0f 秒", seconds)
+            return String(format: L10n.text("%.0f 秒"), seconds)
         }
-        return String(format: "%.1f 秒", seconds)
+        return String(format: L10n.text("%.1f 秒"), seconds)
     }
 
     private static let timeFormatter: DateFormatter = {
@@ -254,31 +254,31 @@ public enum ScheduleCalculator {
     public static func preflight(plan: CapturePlan, overhead: Double = 1.0) -> [String] {
         var issues: [String] = []
         if plan.exposureSeconds <= 0 {
-            issues.append("曝光时间必须大于 0")
+            issues.append(L10n.text("曝光时间必须大于 0"))
         }
         if let ramp = plan.ramp {
             if ramp.startSeconds <= 0 || ramp.endSeconds <= 0 {
-                issues.append("曝光渐变的起止值必须大于 0")
+                issues.append(L10n.text("曝光渐变的起止值必须大于 0"))
             }
         }
         switch plan.interval {
         case .fixedStart(let seconds):
             if seconds <= 0 {
-                issues.append("固定间隔必须大于 0")
+                issues.append(L10n.text("固定间隔必须大于 0"))
             } else if seconds < plan.exposureSeconds + overhead {
-                issues.append(String(format: "固定间隔 %.0f 秒小于曝光 %.0f 秒 + 处理时间，时间点会顺延或跳过",
+                issues.append(String(format: L10n.text("固定间隔 %.0f 秒小于曝光 %.0f 秒 + 处理时间，时间点会顺延或跳过"),
                                      seconds, plan.exposureSeconds))
             }
         case .afterExposure(let seconds):
-            if seconds < 0 { issues.append("曝光后等待不能为负") }
+            if seconds < 0 { issues.append(L10n.text("曝光后等待不能为负")) }
         }
         switch plan.end {
         case .count(let count):
-            if count <= 0 { issues.append("目标张数必须大于 0") }
+            if count <= 0 { issues.append(L10n.text("目标张数必须大于 0")) }
         case .duration(let seconds):
-            if seconds <= 0 { issues.append("持续时长必须大于 0") }
+            if seconds <= 0 { issues.append(L10n.text("持续时长必须大于 0")) }
         case .at(let date):
-            if date < Date() { issues.append("结束时刻已经过去") }
+            if date < Date() { issues.append(L10n.text("结束时刻已经过去")) }
         case .manual:
             break
         }

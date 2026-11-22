@@ -49,9 +49,9 @@ struct ParameterBarView: View {
 
                 ParameterCell(label: "SHUTTER",
                               value: exposureValue,
-                              unit: "秒",
+                              unit: L10n.text("秒"),
                               detail: model.plan.ramp.map {
-                                  "渐变 \(CapturePlan.formatDuration($0.startSeconds))→\(CapturePlan.formatDuration($0.endSeconds))"
+                                  L10n.text("渐变 %@→%@", CapturePlan.formatDuration($0.startSeconds), CapturePlan.formatDuration($0.endSeconds))
                               }) {
                     editor = .exposure
                 }
@@ -91,7 +91,7 @@ struct ParameterBarView: View {
                         .environment(\.palette, palette)
                 }
 
-                        ParameterCell(label: "END", value: shortEnd) {
+                        ParameterCell(label: "END", value: shortEnd, unit: endUnit) {
                             editor = .end
                         }
                         .popover(isPresented: binding(.end), arrowEdge: .bottom) {
@@ -107,7 +107,7 @@ struct ParameterBarView: View {
             }
 
             if !model.planIssues.isEmpty {
-                Text(model.planIssues.joined(separator: "；"))
+                Text(model.planIssues.joined(separator: L10n.text("；")))
                     .font(CinemaFont.tiny(10))
                     .foregroundStyle(palette.amber)
                     .lineLimit(1)
@@ -124,7 +124,7 @@ struct ParameterBarView: View {
             Button {
                 model.captureOnce()
             } label: {
-                Label("试拍", systemImage: "camera")
+                Label(L10n.text("试拍"), systemImage: "camera")
             }
             .buttonStyle(CinemaButtonStyle(compact: true))
             .disabled(model.isRunning || model.isSingleShot || model.findStarMode)
@@ -137,7 +137,7 @@ struct ParameterBarView: View {
                           ? (model.isPaused ? "play.fill" : "pause.fill")
                           : "play.fill")
                         .font(.system(size: 10, weight: .bold))
-                    Text(model.isRunning ? (model.isPaused ? "继续" : "暂停") : "开始")
+                    Text(model.isRunning ? (model.isPaused ? L10n.text("继续") : L10n.text("暂停")) : L10n.text("开始"))
                 }
             }
             .buttonStyle(CinemaButtonStyle(prominent: !model.isRunning || model.isPaused, compact: true))
@@ -146,7 +146,7 @@ struct ParameterBarView: View {
             Button {
                 model.stopSequence()
             } label: {
-                Label("停止", systemImage: "stop.fill")
+                Label(L10n.text("停止"), systemImage: "stop.fill")
             }
             .buttonStyle(CinemaButtonStyle(danger: true, compact: true))
             .disabled(!model.isRunning)
@@ -163,7 +163,7 @@ struct ParameterBarView: View {
 
     private var shortStart: String {
         switch model.plan.start {
-        case .immediate: return "立即"
+        case .immediate: return L10n.text("立即")
         case .delay(let seconds): return "+\(CapturePlan.formatDuration(seconds))"
         case .at(let date):
             let formatter = DateFormatter()
@@ -181,20 +181,25 @@ struct ParameterBarView: View {
 
     private var intervalDetail: String {
         switch model.plan.interval {
-        case .fixedStart: return "固定开始间隔"
-        case .afterExposure: return "曝光结束后"
+        case .fixedStart: return L10n.text("固定开始间隔")
+        case .afterExposure: return L10n.text("曝光结束后")
         }
+    }
+
+    private var endUnit: String? {
+        if case .count = model.plan.end { return L10n.text("张") }
+        return nil
     }
 
     private var shortEnd: String {
         switch model.plan.end {
-        case .count(let count): return "\(count) 张"
+        case .count(let count): return String(count)
         case .duration(let seconds): return CapturePlan.formatDuration(seconds)
         case .at(let date):
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm"
             return formatter.string(from: date)
-        case .manual: return "手动"
+        case .manual: return L10n.text("手动")
         }
     }
 
@@ -241,7 +246,7 @@ private struct ISOEditor: View {
                     .buttonStyle(ChipButtonStyle(selected: model.plan.iso == value))
                 }
             }
-            Stepper("自定义 \(model.plan.iso)",
+            Stepper(L10n.text("自定义 %@", model.plan.iso),
                     value: Binding(get: { model.plan.iso },
                                    set: { model.plan.iso = min(102400, max(32, $0)) }),
                     step: 100)
@@ -256,7 +261,7 @@ private struct ExposureEditor: View {
     private let quick: [Double] = [1, 5, 10, 15, 20, 30, 60, 120, 300]
 
     var body: some View {
-        EditorShell(title: "曝光秒数") {
+        EditorShell(title: L10n.text("曝光秒数")) {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 3),
                       spacing: 4) {
                 ForEach(quick, id: \.self) { value in
@@ -268,14 +273,14 @@ private struct ExposureEditor: View {
                 }
             }
             HStack(spacing: 6) {
-                Text("自定义")
+                Text(L10n.text("自定义"))
                     .font(CinemaFont.label(11))
                     .foregroundStyle(.secondary)
-                TextField("秒", value: $model.plan.exposureSeconds, format: .number)
+                TextField(L10n.text("秒"), value: $model.plan.exposureSeconds, format: .number)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 80)
                     .font(CinemaFont.smallValue(12))
-                Text("秒").font(CinemaFont.label(11)).foregroundStyle(.secondary)
+                Text(L10n.text("秒")).font(CinemaFont.label(11)).foregroundStyle(.secondary)
             }
         }
     }
@@ -287,7 +292,7 @@ private struct ApertureEditor: View {
     private let values: [Double] = [1.4, 1.8, 2.0, 2.8, 3.5, 4.0, 5.6, 8.0, 11.0, 16.0]
 
     var body: some View {
-        EditorShell(title: "光圈") {
+        EditorShell(title: L10n.text("光圈")) {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4),
                       spacing: 4) {
                 ForEach(values, id: \.self) { value in
@@ -299,12 +304,12 @@ private struct ApertureEditor: View {
                         selected: model.plan.aperture.map { abs($0 - value) < 0.01 } ?? false))
                 }
             }
-            Button("固定光圈 / 无电子光圈") {
+            Button(L10n.text("固定光圈 / 无电子光圈")) {
                 model.plan.aperture = nil
                 editor = nil
             }
             .buttonStyle(ChipButtonStyle(selected: model.plan.aperture == nil))
-            Text("镜头是否支持由设备能力决定；不支持时只记录不设置。")
+            Text(L10n.text("镜头是否支持由设备能力决定；不支持时只记录不设置。"))
                 .font(CinemaFont.tiny(10))
                 .foregroundStyle(.secondary)
         }
@@ -316,11 +321,11 @@ private struct StartEditor: View {
     @Binding var editor: ParameterBarView.EditorField?
 
     var body: some View {
-        EditorShell(title: "开始方式") {
+        EditorShell(title: L10n.text("开始方式")) {
             Picker("", selection: startIndex) {
-                Text("立即").tag(0)
-                Text("延迟").tag(1)
-                Text("指定时刻").tag(2)
+                Text(L10n.text("立即")).tag(0)
+                Text(L10n.text("延迟")).tag(1)
+                Text(L10n.text("指定时刻")).tag(2)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -328,18 +333,18 @@ private struct StartEditor: View {
             switch model.plan.start {
             case .delay:
                 HStack {
-                    Text("延迟").font(CinemaFont.label(11))
-                    TextField("秒", value: startDelay, format: .number)
+                    Text(L10n.text("延迟")).font(CinemaFont.label(11))
+                    TextField(L10n.text("秒"), value: startDelay, format: .number)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 80)
-                    Text("秒").font(CinemaFont.label(11))
+                    Text(L10n.text("秒")).font(CinemaFont.label(11))
                 }
             case .at:
-                DatePicker("开始时刻", selection: startDate,
+                DatePicker(L10n.text("开始时刻"), selection: startDate,
                            displayedComponents: [.date, .hourAndMinute])
                     .font(CinemaFont.label(11))
             case .immediate:
-                Text("连接正常后立刻开始。")
+                Text(L10n.text("连接正常后立刻开始。"))
                     .font(CinemaFont.tiny(10))
                     .foregroundStyle(.secondary)
             }
@@ -382,30 +387,30 @@ private struct IntervalEditor: View {
     @Binding var editor: ParameterBarView.EditorField?
 
     var body: some View {
-        EditorShell(title: "拍摄节奏") {
+        EditorShell(title: L10n.text("拍摄节奏")) {
             Picker("", selection: intervalIndex) {
-                Text("固定开始间隔").tag(0)
-                Text("曝光后等待").tag(1)
+                Text(L10n.text("固定开始间隔")).tag(0)
+                Text(L10n.text("曝光后等待")).tag(1)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
 
             HStack {
-                Text("秒数").font(CinemaFont.label(11))
-                TextField("秒", value: intervalSeconds, format: .number)
+                Text(L10n.text("秒数")).font(CinemaFont.label(11))
+                TextField(L10n.text("秒"), value: intervalSeconds, format: .number)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 80)
-                Text("秒").font(CinemaFont.label(11))
+                Text(L10n.text("秒")).font(CinemaFont.label(11))
             }
 
             if case .fixedStart = model.plan.interval {
-                Picker("被打断时", selection: $model.plan.policy) {
+                Picker(L10n.text("被打断时"), selection: $model.plan.policy) {
                     ForEach(CapturePlan.MissedSlotPolicy.allCases, id: \.self) { policy in
                         Text(policy.displayName).tag(policy)
                     }
                 }
                 .font(CinemaFont.label(11))
-                Text("固定间隔按开始时刻排程；设备忙或下载慢时按此策略处理。")
+                Text(L10n.text("固定间隔按开始时刻排程；设备忙或下载慢时按此策略处理。"))
                     .font(CinemaFont.tiny(10))
                     .foregroundStyle(.secondary)
             }
@@ -445,12 +450,12 @@ private struct EndEditor: View {
     @Binding var editor: ParameterBarView.EditorField?
 
     var body: some View {
-        EditorShell(title: "结束条件") {
+        EditorShell(title: L10n.text("结束条件")) {
             Picker("", selection: endIndex) {
-                Text("张数").tag(0)
-                Text("时长").tag(1)
-                Text("时刻").tag(2)
-                Text("手动").tag(3)
+                Text(L10n.text("张数")).tag(0)
+                Text(L10n.text("时长")).tag(1)
+                Text(L10n.text("时刻")).tag(2)
+                Text(L10n.text("手动")).tag(3)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -458,26 +463,26 @@ private struct EndEditor: View {
             switch model.plan.end {
             case .count:
                 HStack {
-                    Text("目标张数").font(CinemaFont.label(11))
-                    TextField("张", value: countBinding, format: .number)
+                    Text(L10n.text("目标张数")).font(CinemaFont.label(11))
+                    TextField(L10n.text("张"), value: countBinding, format: .number)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 70)
-                    Text("张").font(CinemaFont.label(11))
+                    Text(L10n.text("张")).font(CinemaFont.label(11))
                 }
             case .duration:
                 HStack {
-                    Text("持续").font(CinemaFont.label(11))
-                    TextField("秒", value: durationBinding, format: .number)
+                    Text(L10n.text("持续")).font(CinemaFont.label(11))
+                    TextField(L10n.text("秒"), value: durationBinding, format: .number)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 80)
-                    Text("秒").font(CinemaFont.label(11))
+                    Text(L10n.text("秒")).font(CinemaFont.label(11))
                 }
             case .at:
-                DatePicker("结束时刻", selection: endDateBinding,
+                DatePicker(L10n.text("结束时刻"), selection: endDateBinding,
                            displayedComponents: [.date, .hourAndMinute])
                     .font(CinemaFont.label(11))
             case .manual:
-                Text("手动按下停止才结束；适合整夜拍摄。")
+                Text(L10n.text("手动按下停止才结束；适合整夜拍摄。"))
                     .font(CinemaFont.tiny(10))
                     .foregroundStyle(.secondary)
             }

@@ -292,13 +292,13 @@ public enum SessionStoreError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .noActiveSession:
-            return "没有进行中的会话"
+            return L10n.text("没有进行中的会话")
         case .sessionMismatch:
-            return "帧不属于当前会话"
+            return L10n.text("帧不属于当前会话")
         case .directoryCreationFailed(let url, let reason):
-            return "无法创建会话目录 \(url.path)：\(reason)"
+            return L10n.text("无法创建会话目录 %@：%@", url.path, reason)
         case .writeFailed(let url, let reason):
-            return "无法保存 \(url.lastPathComponent)：\(reason)"
+            return L10n.text("无法保存 %@：%@", url.lastPathComponent, reason)
         }
     }
 }
@@ -538,7 +538,7 @@ public final class SessionStore: @unchecked Sendable {
                 throw SessionStoreError.directoryCreationFailed(url, error.localizedDescription)
             }
         }
-        throw SessionStoreError.directoryCreationFailed(rootURL, "目录名重复过多")
+        throw SessionStoreError.directoryCreationFailed(rootURL, L10n.text("目录名重复过多"))
     }
 
     // MARK: - Naming

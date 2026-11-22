@@ -44,11 +44,11 @@ private struct AutoPanel: View {
 
     var body: some View {
         PanelSection(title: "AUTO",
-                     subtitle: model.autoExposure.isRunning ? "搜索中" : "星空自动曝光",
-                     help: "按焦距估算能拍多久才会拖线，再试拍调整天空亮度。焦距留空时会读取第一张照片的 EXIF。",
+                     subtitle: model.autoExposure.isRunning ? L10n.text("搜索中") : L10n.text("星空自动曝光"),
+                     help: L10n.text("按焦距估算能拍多久才会拖线，再试拍调整天空亮度。焦距留空时会读取第一张照片的 EXIF。"),
                      expandedByDefault: true) {
             HStack(spacing: 8) {
-                TextField("焦距 mm（留空读 EXIF）", text: $focalText)
+                TextField(L10n.text("焦距 mm（留空读 EXIF）"), text: $focalText)
                     .textFieldStyle(.roundedBorder)
                     .font(CinemaFont.tiny(10))
                     .frame(width: 150)
@@ -61,19 +61,19 @@ private struct AutoPanel: View {
                         }
                     }
                 Spacer()
-                Button(model.autoExposure.isRunning ? "搜索中…" : "星空 Auto") {
+                Button(model.autoExposure.isRunning ? L10n.text("搜索中…") : L10n.text("星空 Auto")) {
                     model.runAutoExposure()
                 }
                 .buttonStyle(CinemaButtonStyle(prominent: true, compact: true))
                 .disabled(!model.canRunAutoExposure)
                 if model.autoExposure.isRunning {
-                    Button("取消") { model.cancelAutoExposure() }
+                    Button(L10n.text("取消")) { model.cancelAutoExposure() }
                         .buttonStyle(CinemaButtonStyle(danger: true, compact: true))
                 }
             }
 
-            InfoRow(label: "焦距",
-                    value: model.plan.focalLengthMM.map { String(format: "%.0f mm", $0) } ?? "未记录")
+            InfoRow(label: L10n.text("焦距"),
+                    value: model.plan.focalLengthMM.map { String(format: "%.0f mm", $0) } ?? L10n.text("未记录"))
 
             if !model.autoExposure.message.isEmpty {
                 Text(model.autoExposure.message)
@@ -84,9 +84,9 @@ private struct AutoPanel: View {
             }
 
             if let result = model.autoExposure.result {
-                InfoRow(label: "结论", value: result.status.displayText,
+                InfoRow(label: L10n.text("结论"), value: result.status.displayText,
                         color: result.status.isRecommended ? palette.textSecondary : palette.amber)
-                InfoRow(label: "建议", value: String(
+                InfoRow(label: L10n.text("建议"), value: String(
                     format: "ISO %d  %@  f/%.1f",
                     result.settings.iso,
                     CapturePlan.formatDuration(result.settings.exposureSeconds),
@@ -95,7 +95,7 @@ private struct AutoPanel: View {
 
             if !model.autoExposure.samples.isEmpty {
                 ForEach(Array(model.autoExposure.samples.enumerated()), id: \.offset) { index, sample in
-                    Text(String(format: "%d. ISO %d  %@  背景 %.0f  星点 %d  偏心 %.2f",
+                    Text(String(format: L10n.text("%d. ISO %d  %@  背景 %.0f  星点 %d  偏心 %.2f"),
                                 index + 1, sample.settings.iso,
                                 CapturePlan.formatDuration(sample.settings.exposureSeconds),
                                 sample.metrics.background, sample.metrics.starCount,
@@ -118,29 +118,29 @@ private struct PlanPanel: View {
 
     var body: some View {
         PanelSection(title: "PLAN",
-                         subtitle: model.isRunning ? "运行中" : "拍摄计划",
-                         help: "固定开拍间隔会把曝光时间算在内。上一张还没拍完时，可以让后面的照片顺延，也可以跳过这一张。") {
+                         subtitle: model.isRunning ? L10n.text("运行中") : L10n.text("拍摄计划"),
+                         help: L10n.text("固定开拍间隔会把曝光时间算在内。上一张还没拍完时，可以让后面的照片顺延，也可以跳过这一张。")) {
             Text(model.plan.summary)
                 .font(CinemaFont.tiny(10))
                 .foregroundStyle(palette.textDim.opacity(0.95))
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Toggle("曝光渐变（黎明/黄昏延时）", isOn: rampToggle)
+            Toggle(L10n.text("曝光渐变（黎明/黄昏延时）"), isOn: rampToggle)
                 .toggleStyle(.checkbox)
                 .font(CinemaFont.label(11))
             if model.plan.ramp != nil {
                 HStack(spacing: 6) {
-                    Text("起")
+                    Text(L10n.text("起"))
                         .font(CinemaFont.tiny(10))
                         .foregroundStyle(palette.textDim)
-                    TextField("秒", value: rampStart, format: .number)
+                    TextField(L10n.text("秒"), value: rampStart, format: .number)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 64)
-                    Text("止")
+                    Text(L10n.text("止"))
                         .font(CinemaFont.tiny(10))
                         .foregroundStyle(palette.textDim)
-                    TextField("秒", value: rampEnd, format: .number)
+                    TextField(L10n.text("秒"), value: rampEnd, format: .number)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 64)
                     Picker("", selection: rampCurve) {
@@ -168,17 +168,17 @@ private struct PlanPanel: View {
             }
 
             HStack(spacing: 8) {
-                Button("保存预设") { showSavePreset = true }
+                Button(L10n.text("保存预设")) { showSavePreset = true }
                     .buttonStyle(CinemaButtonStyle(compact: true))
                 Menu {
                     if model.presets.isEmpty {
-                        Text("无预设")
+                        Text(L10n.text("无预设"))
                     } else {
                         ForEach(model.presets) { preset in
                             Button(preset.name) { model.loadPreset(preset) }
                         }
                         Divider()
-                        Menu("删除预设") {
+                        Menu(L10n.text("删除预设")) {
                             ForEach(model.presets) { preset in
                                 Button(preset.name, role: .destructive) {
                                     model.deletePreset(preset)
@@ -187,7 +187,7 @@ private struct PlanPanel: View {
                         }
                     }
                 } label: {
-                    Text("载入预设")
+                    Text(L10n.text("载入预设"))
                         .font(CinemaFont.label(11))
                         .foregroundStyle(palette.textSecondary)
                 }
@@ -197,18 +197,18 @@ private struct PlanPanel: View {
             }
             .popover(isPresented: $showSavePreset, arrowEdge: .trailing) {
                 VStack(alignment: .leading, spacing: 9) {
-                    Text("保存预设")
+                    Text(L10n.text("保存预设"))
                         .font(CinemaFont.label(11))
                         .foregroundStyle(palette.textSecondary)
-                    TextField("预设名", text: $model.presetName)
+                    TextField(L10n.text("预设名"), text: $model.presetName)
                         .textFieldStyle(.roundedBorder)
                         .font(CinemaFont.label(11))
                         .frame(width: 200)
                     HStack {
                         Spacer()
-                        Button("取消") { showSavePreset = false }
+                        Button(L10n.text("取消")) { showSavePreset = false }
                             .buttonStyle(CinemaButtonStyle(compact: true))
-                        Button("保存") {
+                        Button(L10n.text("保存")) {
                             model.savePreset()
                             showSavePreset = false
                         }
@@ -220,12 +220,12 @@ private struct PlanPanel: View {
                 .background(palette.panel)
             }
 
-            Toggle("达到合格张数后暂停", isOn: qualifiedToggle)
+            Toggle(L10n.text("达到合格张数后暂停"), isOn: qualifiedToggle)
                 .toggleStyle(.checkbox)
                 .font(CinemaFont.label(11))
             if qualifiedToggle.wrappedValue {
                 Stepper(value: qualifiedTarget, in: 1...100000) {
-                    Text("合格目标 \(qualifiedTarget.wrappedValue) 张")
+                    Text(L10n.text("合格目标 %@ 张", qualifiedTarget.wrappedValue))
                         .font(CinemaFont.label(11))
                 }
             }
@@ -289,8 +289,8 @@ private struct GroupsPanel: View {
 
     var body: some View {
         PanelSection(title: "GROUPS",
-                     subtitle: model.groupRunning ? (model.activeGroupName ?? "运行中") : "分组拍摄",
-                     help: "勾选要拍的分组。每组可以单独设置曝光和对焦偏移，最后一组拍完后镜头会按相反步数回调。") {
+                     subtitle: model.groupRunning ? (model.activeGroup?.displayName ?? L10n.text("运行中")) : L10n.text("分组拍摄"),
+                     help: L10n.text("勾选要拍的分组。每组可以单独设置曝光和对焦偏移，最后一组拍完后镜头会按相反步数回调。")) {
             ForEach(model.groups) { group in
                 let index = model.groups.firstIndex(where: { $0.id == group.id }) ?? 0
                 let active = model.activeGroupIndex == index
@@ -305,11 +305,11 @@ private struct GroupsPanel: View {
                                 set: { model.setGroupEnabled(group.id, $0) }))
                                 .labelsHidden()
                                 .toggleStyle(.checkbox)
-                            Text(group.name)
+                            Text(group.displayName)
                                 .font(CinemaFont.label(11))
                                 .foregroundStyle(active ? palette.text : palette.textSecondary)
                             if active {
-                                StatusChip(text: "当前", color: palette.amber)
+                                StatusChip(text: L10n.text("当前"), color: palette.amber)
                             }
                             Spacer()
                         }
@@ -320,13 +320,13 @@ private struct GroupsPanel: View {
                             .lineLimit(1)
 
                         HStack(spacing: 5) {
-                            Button("载入") { model.loadGroupPlan(group) }
+                            Button(L10n.text("载入")) { model.loadGroupPlan(group) }
                                 .buttonStyle(CinemaButtonStyle(compact: true))
-                            Button("用当前计划更新") { model.updateGroupFromPlan(group.id) }
+                            Button(L10n.text("用当前计划更新")) { model.updateGroupFromPlan(group.id) }
                                 .buttonStyle(CinemaButtonStyle(compact: true))
                             Menu {
                                 ForEach([-200, -100, -50, 0, 50, 100, 200], id: \.self) { steps in
-                                    Button(String(format: "%+d 步", steps)) {
+                                    Button(String(format: L10n.text("%+d 步"), steps)) {
                                         model.setGroupFocusOffset(group.id, steps)
                                     }
                                 }
@@ -345,12 +345,12 @@ private struct GroupsPanel: View {
             }
 
             HStack(spacing: 8) {
-                Button("开始分组") { model.startGroupShoot() }
+                Button(L10n.text("开始分组")) { model.startGroupShoot() }
                     .buttonStyle(CinemaButtonStyle(prominent: true, compact: true))
                     .disabled(model.isRunning || !model.status.state.isConnected
                               || !model.groups.contains(where: { $0.enabled }))
                 Spacer()
-                Text("\(model.groups.filter { $0.enabled }.count) 组启用")
+                Text(L10n.text("%@ 组启用", model.groups.filter { $0.enabled }.count))
                     .font(CinemaFont.tiny(9))
                     .foregroundStyle(palette.textDim)
             }
@@ -358,7 +358,7 @@ private struct GroupsPanel: View {
     }
 
     private func focusLabel(_ steps: Int) -> String {
-        steps == 0 ? "对焦 +0" : String(format: "对焦 %+d", steps)
+        steps == 0 ? L10n.text("对焦 +0") : String(format: L10n.text("对焦 %+d"), steps)
     }
 }
 
@@ -370,20 +370,20 @@ private struct FocusPanel: View {
 
     var body: some View {
         PanelSection(title: "FOCUS",
-                         subtitle: model.focus.isRunning ? "搜索中" : "对焦",
-                         help: "搜索时镜头会向两个方向移动。拍完验证帧后，比较星点的 FWHM，数值越小，星点越紧。方向 1 和 2 随镜头而异。") {
+                         subtitle: model.focus.isRunning ? L10n.text("搜索中") : L10n.text("对焦"),
+                         help: L10n.text("搜索时镜头会向两个方向移动。拍完验证帧后，比较星点的 FWHM，数值越小，星点越紧。方向 1 和 2 随镜头而异。")) {
             HStack(spacing: 6) {
-                Button(model.focus.isRunning ? "搜索中…" : "自动对焦") {
+                Button(model.focus.isRunning ? L10n.text("搜索中…") : L10n.text("自动对焦")) {
                     model.runAutoFocus()
                 }
                 .buttonStyle(CinemaButtonStyle(compact: true))
                 .disabled(!model.canAutoFocus)
 
                 if model.focus.isRunning {
-                    Button("取消") { model.cancelFocus() }
+                    Button(L10n.text("取消")) { model.cancelFocus() }
                         .buttonStyle(CinemaButtonStyle(danger: true, compact: true))
                 }
-                Button(model.focusBracketRunning ? "包围中…" : "焦点包围") {
+                Button(model.focusBracketRunning ? L10n.text("包围中…") : L10n.text("焦点包围")) {
                     model.runFocusBracket()
                 }
                 .buttonStyle(CinemaButtonStyle(compact: true))
@@ -407,7 +407,7 @@ private struct FocusPanel: View {
                     StatusChip(text: result.status.displayText,
                                color: result.status == .confirmed ? palette.selected : palette.amber)
                     Spacer()
-                    Text(String(format: "置信 %.0f%%", result.confidence * 100))
+                    Text(String(format: L10n.text("置信 %.0f%%"), result.confidence * 100))
                         .font(CinemaFont.tiny(10))
                         .foregroundStyle(palette.textDim)
                         .monospacedDigit()
@@ -415,28 +415,28 @@ private struct FocusPanel: View {
                 if let baseline = result.baseline, let best = result.best {
                     InfoRow(label: "FWHM",
                             value: String(format: "%.2f → %.2f", baseline.medianFWHM, best.medianFWHM))
-                    InfoRow(label: "样本数", value: "\(result.samples.count)")
+                    InfoRow(label: L10n.text("样本数"), value: "\(result.samples.count)")
                 }
             }
 
-            Text("手动微调")
+            Text(L10n.text("手动微调"))
                 .font(CinemaFont.tiny(10))
                 .foregroundStyle(palette.textDim)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 4),
                                 GridItem(.flexible(), spacing: 4)], spacing: 4) {
-                nudgeButton("方向 1  +50", .one, 50)
-                nudgeButton("方向 1  +10", .one, 10)
-                nudgeButton("方向 2  +10", .two, 10)
-                nudgeButton("方向 2  +50", .two, 50)
+                nudgeButton(L10n.text("方向 1  +50"), .one, 50)
+                nudgeButton(L10n.text("方向 1  +10"), .one, 10)
+                nudgeButton(L10n.text("方向 2  +10"), .two, 10)
+                nudgeButton(L10n.text("方向 2  +50"), .two, 50)
             }
 
             if model.canControlCameraScreen {
-                Toggle("关闭相机屏", isOn: Binding(
+                Toggle(L10n.text("关闭相机屏"), isOn: Binding(
                     get: { model.cameraScreenOff },
                     set: { model.setCameraScreen(off: $0) }))
                     .toggleStyle(.checkbox)
                     .font(CinemaFont.label(11))
-                    .help("PC mode 下关闭机身屏；打开时恢复 remote mode")
+                    .help(L10n.text("PC mode 下关闭机身屏；打开时恢复 remote mode"))
             }
 
         }
@@ -457,17 +457,17 @@ private struct ViewfinderPanel: View {
 
     var body: some View {
         PanelSection(title: "VIEWFINDER",
-                     subtitle: model.findStarMode ? "找星" : (model.liveAssistEnabled ? "取景辅助" : "取景"),
-                     help: "调增益和黑场可以看清暗星，对焦用原始帧。找星时 ISO 暂时升到 12800，退出后恢复。") {
+                     subtitle: model.findStarMode ? L10n.text("找星") : (model.liveAssistEnabled ? L10n.text("取景辅助") : L10n.text("取景")),
+                     help: L10n.text("调增益和黑场可以看清暗星，对焦用原始帧。找星时 ISO 暂时升到 12800，退出后恢复。")) {
             HStack(spacing: 8) {
-                Button(model.findStarMode ? "退出找星" : "找星模式") {
+                Button(model.findStarMode ? L10n.text("退出找星") : L10n.text("找星模式")) {
                     model.toggleFindStarMode()
                 }
                 .buttonStyle(CinemaButtonStyle(prominent: !model.findStarMode, compact: true))
                 .disabled(!model.findStarMode && !model.canUseFindStarMode)
 
                 if model.findStarMode {
-                    Button("对焦最亮星") {
+                    Button(L10n.text("对焦最亮星")) {
                         model.focusBrightestStar()
                     }
                     .buttonStyle(CinemaButtonStyle(compact: true))
@@ -477,26 +477,26 @@ private struct ViewfinderPanel: View {
             }
 
             if model.findStarMode {
-                InfoRow(label: "临时 ISO", value: "12800", color: palette.amber)
+                InfoRow(label: L10n.text("临时 ISO"), value: "12800", color: palette.amber)
                 if let star = model.liveBrightestStar {
-                    InfoRow(label: "最亮星",
-                            value: String(format: "峰值 %.0f  FWHM %.2f", star.peak, star.fwhm))
+                    InfoRow(label: L10n.text("最亮星"),
+                            value: String(format: L10n.text("峰值 %.0f  FWHM %.2f"), star.peak, star.fwhm))
                 }
                 if !model.findStarFocusMessage.isEmpty {
-                    InfoRow(label: "对焦结果", value: model.findStarFocusMessage,
-                            color: model.findStarFocusMessage.hasPrefix("已对焦")
+                    InfoRow(label: L10n.text("对焦结果"), value: model.findStarFocusMessage,
+                            color: model.findStarFocusMessage.hasPrefix(L10n.text("已对焦"))
                                 ? palette.selected : palette.amber)
                 }
                 if !model.findStarStatus.isEmpty {
                     Text(model.findStarStatus)
                         .font(CinemaFont.tiny(10))
-                        .foregroundStyle(model.findStarStatus.contains("未检测")
+                        .foregroundStyle(model.findStarStatus.localizedCaseInsensitiveContains(L10n.text("未检测到星点"))
                                          ? palette.amber : palette.textSecondary)
                 }
             }
 
             HStack(spacing: 8) {
-                Toggle("取景辅助", isOn: Binding(
+                Toggle(L10n.text("取景辅助"), isOn: Binding(
                     get: { model.liveAssistEnabled },
                     set: { model.setLiveAssist($0) }))
                     .toggleStyle(.checkbox)
@@ -517,40 +517,40 @@ private struct ViewfinderPanel: View {
             }
 
             if model.supportsLiveStretch {
-                Toggle("取景拉伸", isOn: Binding(
+                Toggle(L10n.text("取景拉伸"), isOn: Binding(
                     get: { model.liveStretch.enabled },
                     set: { model.setLiveStretchEnabled($0) }))
                     .toggleStyle(.checkbox)
                     .font(CinemaFont.label(11))
-                stretchRow(label: "增益",
+                stretchRow(label: L10n.text("增益"),
                            value: 30 / max(0.1, model.liveStretch.gainSigma),
                            range: 0.5...5, step: 0.1,
                            text: String(format: "%.1f×", 30 / max(0.1, model.liveStretch.gainSigma))) {
                     model.setLiveStretchGain(30 / max(0.1, $0))
                 }
                 .disabled(!model.liveStretch.enabled)
-                stretchRow(label: "黑场", value: model.liveStretch.blackSigma, range: -3...3, step: 0.25,
+                stretchRow(label: L10n.text("黑场"), value: model.liveStretch.blackSigma, range: -3...3, step: 0.25,
                            text: String(format: "%+.1fσ", model.liveStretch.blackSigma)) {
                     model.setLiveStretchBlack($0)
                 }
                 .disabled(!model.liveStretch.enabled)
                 if let stats = model.liveStretchStats {
-                    InfoRow(label: "背景",
-                            value: String(format: "中位 %.0f / σ %.1f", stats.median, stats.sigma))
+                    InfoRow(label: L10n.text("背景"),
+                            value: String(format: L10n.text("中位 %.0f / σ %.1f"), stats.median, stats.sigma))
                 }
-                Toggle("保持后台活跃", isOn: Binding(
+                Toggle(L10n.text("保持后台活跃"), isOn: Binding(
                     get: { model.keepAlive },
                     set: { model.setKeepAlive($0) }))
                     .toggleStyle(.checkbox)
                     .font(CinemaFont.label(11))
-                    .help("Nikon 连接期间阻止 App Nap 节流；显示仍可休眠")
+                    .help(L10n.text("Nikon 连接期间阻止 App Nap 节流；显示仍可休眠"))
             }
 
             if model.liveAssistEnabled {
-                InfoRow(label: "实时 FWHM",
+                InfoRow(label: L10n.text("实时 FWHM"),
                         value: model.liveFWHM.map { String(format: "%.2f px", $0) } ?? "—")
-                InfoRow(label: "星点", value: "\(model.liveStars.count)")
-                InfoRow(label: "高光比例",
+                InfoRow(label: L10n.text("星点"), value: "\(model.liveStars.count)")
+                InfoRow(label: L10n.text("高光比例"),
                         value: String(format: "%.2f%%", model.liveClipFraction * 100),
                         color: model.liveClipFraction > 0.001 ? palette.amber : nil)
                 HistogramView(bins: model.liveHistogram)
@@ -566,7 +566,8 @@ private struct ViewfinderPanel: View {
             Text(label)
                 .font(CinemaFont.tiny(10))
                 .foregroundStyle(palette.textDim)
-                .frame(width: 24, alignment: .leading)
+                .fixedSize()
+                .frame(minWidth: 54, alignment: .leading)
             Slider(value: Binding(get: { value }, set: set), in: range, step: step)
             Text(text)
                 .font(CinemaFont.tiny(10))
@@ -585,10 +586,10 @@ private struct DarkPanel: View {
 
     var body: some View {
         PanelSection(title: "DARK",
-                     subtitle: model.darkCollecting ? "采集中" : (model.darkEnabled ? "已启用" : "暗场校准"),
-                     help: "盖上镜头盖，用拍星时的 ISO 和曝光时间采集几张暗场。应用取平均后，用它校正分析图和叠加图。",
+                     subtitle: model.darkCollecting ? L10n.text("采集中") : (model.darkEnabled ? L10n.text("已启用") : L10n.text("暗场校准")),
+                     help: L10n.text("盖上镜头盖，用拍星时的 ISO 和曝光时间采集几张暗场。应用取平均后，用它校正分析图和叠加图。"),
                      expandedByDefault: true) {
-            Toggle("拍摄时减暗场", isOn: Binding(
+            Toggle(L10n.text("拍摄时减暗场"), isOn: Binding(
                 get: { model.darkEnabled },
                 set: { model.setDarkEnabled($0) }))
                 .toggleStyle(.checkbox)
@@ -596,11 +597,11 @@ private struct DarkPanel: View {
 
             HStack(spacing: 8) {
                 Stepper(value: $model.darkTarget, in: 1...32) {
-                    Text("\(model.darkTarget) 帧")
+                    Text(L10n.text("%@ 帧", model.darkTarget))
                         .font(CinemaFont.label(11))
                         .monospacedDigit()
                 }
-                Button(model.darkCollecting ? "采集中…" : "采集暗场") {
+                Button(model.darkCollecting ? L10n.text("采集中…") : L10n.text("采集暗场")) {
                     model.collectDarks()
                 }
                 .buttonStyle(CinemaButtonStyle(prominent: true, compact: true))
@@ -609,7 +610,7 @@ private struct DarkPanel: View {
             }
 
             if model.darkCollecting {
-                Text("已采集 \(model.darkProgress)/\(model.darkTarget)　\(model.darkStatus)")
+                Text(L10n.text("已采集 %@/%@　%@", model.darkProgress, model.darkTarget, model.darkStatus))
                     .font(CinemaFont.tiny(10))
                     .foregroundStyle(palette.amber)
             } else if !model.darkStatus.isEmpty {
@@ -619,7 +620,7 @@ private struct DarkPanel: View {
             }
 
             if model.darkMetas.isEmpty {
-                Text("尚未采集")
+                Text(L10n.text("尚未采集"))
                     .font(CinemaFont.tiny(10))
                     .foregroundStyle(palette.textDim)
             } else {
@@ -631,19 +632,19 @@ private struct DarkPanel: View {
                                 .font(CinemaFont.smallValue(10.5))
                                 .foregroundStyle(palette.textSecondary)
                             if meta.isUsable {
-                                Text(String(format: "%d 帧  %@  热像素 %d", meta.frameCount,
+                                Text(String(format: L10n.text("%d 帧  %@  热像素 %d"), meta.frameCount,
                                             meta.createdAt.formatted(date: .omitted, time: .shortened),
                                             meta.hotPixelCount))
                                     .font(CinemaFont.tiny(9))
                                     .foregroundStyle(palette.textDim)
                             } else {
-                                Text("分布异常，未启用")
+                                Text(L10n.text("分布异常，未启用"))
                                     .font(CinemaFont.tiny(9))
                                     .foregroundStyle(palette.amber)
                             }
                         }
                         Spacer()
-                        Button("删除") { model.deleteDark(meta) }
+                        Button(L10n.text("删除")) { model.deleteDark(meta) }
                             .buttonStyle(CinemaButtonStyle(danger: true, compact: true))
                     }
                 }
@@ -660,8 +661,8 @@ private struct SessionPanel: View {
 
     var body: some View {
         PanelSection(title: "SESSION",
-                     subtitle: model.sessionInfo == nil ? "会话" : "\(model.sessionFrameCount) 帧",
-                     help: "每组拍摄都有自己的目录，里面有逐张记录、叠加图和导出的报告。实拍 NEF 保存在下载位置。",
+                     subtitle: model.sessionInfo == nil ? L10n.text("会话") : L10n.text("%@ 帧", model.sessionFrameCount),
+                     help: L10n.text("每组拍摄都有自己的目录，里面有逐张记录、叠加图和导出的报告。实拍 NEF 保存在下载位置。"),
                      expandedByDefault: true) {
             if let info = model.sessionInfo {
                 Text(info.name)
@@ -673,26 +674,26 @@ private struct SessionPanel: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             } else {
-                Text("尚未开始拍摄")
+                Text(L10n.text("尚未开始拍摄"))
                     .font(CinemaFont.tiny(10))
                     .foregroundStyle(palette.textDim)
             }
 
             HStack(spacing: 6) {
-                Button("打开目录") { model.revealSession() }
+                Button(L10n.text("打开目录")) { model.revealSession() }
                     .buttonStyle(CinemaButtonStyle(compact: true))
                     .disabled(model.sessionInfo == nil)
-                Button("导出叠加") { model.exportStackImage() }
+                Button(L10n.text("导出叠加")) { model.exportStackImage() }
                     .buttonStyle(CinemaButtonStyle(compact: true))
                     .disabled(!model.canExportStack)
-                Button("导出报告") { model.exportSessionReport() }
+                Button(L10n.text("导出报告")) { model.exportSessionReport() }
                     .buttonStyle(CinemaButtonStyle(compact: true))
                     .disabled(model.sessionInfo == nil)
                 Spacer()
             }
 
             HStack(spacing: 6) {
-                Button(model.sessionStack.isRunning ? "叠加中…" : "自动叠加") {
+                Button(model.sessionStack.isRunning ? L10n.text("叠加中…") : L10n.text("自动叠加")) {
                     model.stackSession()
                 }
                 .buttonStyle(CinemaButtonStyle(prominent: true, compact: true))
@@ -715,7 +716,7 @@ private struct SessionPanel: View {
             }
 
             if let url = model.sessionLastExport {
-                Text("最近导出 \(url.lastPathComponent)")
+                Text(L10n.text("最近导出 %@", url.lastPathComponent))
                     .font(CinemaFont.tiny(9))
                     .foregroundStyle(palette.textDim)
                     .lineLimit(1)
@@ -740,8 +741,8 @@ private struct AnalysisPanel: View {
 
     var body: some View {
         PanelSection(title: "ANALYSIS",
-                         subtitle: model.selectedRecord?.displayName ?? "分析",
-                         help: "放大中心或四角检查星形。星点大小和背景亮度取自原始解码帧。") {
+                         subtitle: model.selectedRecord?.displayName ?? L10n.text("分析"),
+                         help: L10n.text("放大中心或四角检查星形。星点大小和背景亮度取自原始解码帧。")) {
             Picker("", selection: $model.analysisCrop) {
                 ForEach(AnalysisCropMode.allCases) { mode in
                     Text(mode.displayName).tag(mode)
@@ -754,7 +755,7 @@ private struct AnalysisPanel: View {
             }
 
             if model.selectedRecord == nil {
-                Text("选择一张照片")
+                Text(L10n.text("选择一张照片"))
                     .font(CinemaFont.tiny(10))
                     .foregroundStyle(palette.textDim)
             } else {
@@ -764,29 +765,29 @@ private struct AnalysisPanel: View {
                     .lineLimit(2)
 
                 if let metrics = model.analysisMetrics {
-                    InfoRow(label: "检测星数", value: "\(metrics.starCount)")
-                    InfoRow(label: "中位 FWHM", value: String(format: "%.2f px", metrics.medianFWHM))
-                    InfoRow(label: "中位偏心度", value: String(format: "%.3f", metrics.medianEccentricity))
-                    InfoRow(label: "背景", value: String(format: "%.0f ADU", metrics.background))
-                    InfoRow(label: "噪声 σ", value: String(format: "%.1f", metrics.noise))
-                    InfoRow(label: "饱和比例",
+                    InfoRow(label: L10n.text("检测星数"), value: "\(metrics.starCount)")
+                    InfoRow(label: L10n.text("中位 FWHM"), value: String(format: "%.2f px", metrics.medianFWHM))
+                    InfoRow(label: L10n.text("中位偏心度"), value: String(format: "%.3f", metrics.medianEccentricity))
+                    InfoRow(label: L10n.text("背景"), value: String(format: "%.0f ADU", metrics.background))
+                    InfoRow(label: L10n.text("噪声 σ"), value: String(format: "%.1f", metrics.noise))
+                    InfoRow(label: L10n.text("饱和比例"),
                             value: String(format: "%.4f%%", metrics.saturatedFraction * 100),
                             color: metrics.saturatedFraction > 0.001 ? palette.amber : nil)
                 } else {
-                    Text("分析中…")
+                    Text(L10n.text("分析中…"))
                         .font(CinemaFont.tiny(10))
                         .foregroundStyle(palette.textDim)
                 }
 
                 if let dark = model.selectedRecord?.darkApplied {
-                    Text("已减暗场  \(dark)")
+                    Text(L10n.text("已减暗场  %@", dark))
                         .font(CinemaFont.tiny(9.5))
                         .foregroundStyle(palette.textDim)
                 }
 
                 if let measurement = model.analysisMeasurement {
-                    InfoRow(label: "裁切 FWHM",
-                            value: String(format: "%.2f px   %d 星",
+                    InfoRow(label: L10n.text("裁切 FWHM"),
+                            value: String(format: L10n.text("%.2f px   %d 星"),
                                           measurement.medianFWHM, measurement.starCount),
                             color: palette.textSecondary)
                 }
@@ -801,27 +802,27 @@ private struct AnalysisPanel: View {
                 HistogramView(bins: model.histogram)
 
                 HStack(spacing: 6) {
-                    Button(model.meteorScanning ? "扫描中…" : "扫描流星候选") {
+                    Button(model.meteorScanning ? L10n.text("扫描中…") : L10n.text("扫描流星候选")) {
                         model.scanForMeteors()
                     }
                     .buttonStyle(CinemaButtonStyle(compact: true))
                     .disabled(model.meteorScanning || model.selectedRecord == nil)
                     Spacer()
                     if !model.meteorCandidates.isEmpty {
-                        Text("\(model.meteorCandidates.count) 个候选")
+                        Text(L10n.text("%@ 个候选", model.meteorCandidates.count))
                             .font(CinemaFont.tiny(10))
                             .foregroundStyle(palette.amber)
                     }
                 }
                 ForEach(model.meteorCandidates.prefix(5)) { candidate in
-                    InfoRow(label: "候选",
-                            value: String(format: "长 %dpx   比例 %.1f   %.0f°",
+                    InfoRow(label: L10n.text("候选"),
+                            value: String(format: L10n.text("长 %dpx   比例 %.1f   %.0f°"),
                                           candidate.length, candidate.aspect,
                                           candidate.angleDegrees),
                             color: palette.amber)
                 }
 
-                Toggle("显示星点标记", isOn: $model.showStarMarkers)
+                Toggle(L10n.text("显示星点标记"), isOn: $model.showStarMarkers)
                     .toggleStyle(.checkbox)
                     .font(CinemaFont.label(11))
 
@@ -838,10 +839,10 @@ private struct StackPanel: View {
 
     var body: some View {
         PanelSection(title: "STACK",
-                         subtitle: model.stack.enabled ? "开启" : "现场叠加",
-                         help: "用星点对齐各张照片，再取平均。对齐仅校正水平和垂直位移。",
+                         subtitle: model.stack.enabled ? L10n.text("开启") : L10n.text("现场叠加"),
+                         help: L10n.text("用星点对齐各张照片，再取平均。对齐仅校正水平和垂直位移。"),
                          expandedByDefault: false) {
-            Toggle("累积新到照片", isOn: Binding(
+            Toggle(L10n.text("累积新到照片"), isOn: Binding(
                 get: { model.stack.enabled },
                 set: { model.toggleStacking($0) }))
                 .toggleStyle(.checkbox)
@@ -858,19 +859,19 @@ private struct StackPanel: View {
             .labelsHidden()
 
             if model.stack.mode == .mean {
-                InfoRow(label: "参与张数", value: "\(model.stack.accepted)")
-                InfoRow(label: "拒绝张数", value: "\(model.stack.rejected)")
-                InfoRow(label: "有效覆盖", value: String(format: "%.0f%%", model.stack.coverage * 100))
-                InfoRow(label: "最近平移", value: model.stack.shiftText)
+                InfoRow(label: L10n.text("参与张数"), value: "\(model.stack.accepted)")
+                InfoRow(label: L10n.text("拒绝张数"), value: "\(model.stack.rejected)")
+                InfoRow(label: L10n.text("有效覆盖"), value: String(format: "%.0f%%", model.stack.coverage * 100))
+                InfoRow(label: L10n.text("最近平移"), value: model.stack.shiftText)
             } else {
-                InfoRow(label: "帧数", value: "\(model.stack.accepted)")
-                InfoRow(label: "累计曝光", value: CapturePlan.formatDuration(model.stack.totalExposure))
-                InfoRow(label: "间断次数", value: "\(model.stack.gapCount)")
-                InfoRow(label: "最大间断",
+                InfoRow(label: L10n.text("帧数"), value: "\(model.stack.accepted)")
+                InfoRow(label: L10n.text("累计曝光"), value: CapturePlan.formatDuration(model.stack.totalExposure))
+                InfoRow(label: L10n.text("间断次数"), value: "\(model.stack.gapCount)")
+                InfoRow(label: L10n.text("最大间断"),
                         value: model.stack.maxGap > 0
                             ? CapturePlan.formatDuration(model.stack.maxGap) : "—",
                         color: model.stack.gapCount > 0 ? palette.amber : nil)
-                InfoRow(label: "拒绝帧数", value: "\(model.stack.rejected)")
+                InfoRow(label: L10n.text("拒绝帧数"), value: "\(model.stack.rejected)")
             }
 
             if let reason = model.stack.lastReason {
@@ -880,7 +881,7 @@ private struct StackPanel: View {
             }
 
             HStack {
-                Button("重置叠加") { model.resetStack() }
+                Button(L10n.text("重置叠加")) { model.resetStack() }
                     .buttonStyle(CinemaButtonStyle(compact: true))
                 Spacer()
             }
@@ -897,18 +898,18 @@ private struct QualityPanel: View {
 
     var body: some View {
         PanelSection(title: "QUALITY",
-                         subtitle: model.quality.lastAction.isEmpty ? "质量规则" : "有提醒",
-                         help: "星数减少或天空变亮时会提醒。星点连续变大时，可以让序列暂停或重新对焦。",
+                         subtitle: model.quality.lastAction.isEmpty ? L10n.text("质量规则") : L10n.text("有提醒"),
+                         help: L10n.text("星数减少或天空变亮时会提醒。星点连续变大时，可以让序列暂停或重新对焦。"),
                          expandedByDefault: false) {
-            Toggle("清晰度异常时暂停等待复核", isOn: $model.quality.autoPause)
+            Toggle(L10n.text("清晰度异常时暂停等待复核"), isOn: $model.quality.autoPause)
                 .toggleStyle(.checkbox)
                 .font(CinemaFont.label(11))
-            Toggle("自动重新对焦", isOn: $model.quality.autoRefocus)
+            Toggle(L10n.text("自动重新对焦"), isOn: $model.quality.autoRefocus)
                 .toggleStyle(.checkbox)
                 .font(CinemaFont.label(11))
                 .disabled(!model.status.capabilities.contains(.manualFocusDrive))
 
-            InfoRow(label: "合格张数", value: "\(model.quality.qualified)")
+            InfoRow(label: L10n.text("合格张数"), value: "\(model.quality.qualified)")
             if !model.quality.lastAction.isEmpty {
                 Text(model.quality.lastAction)
                     .font(CinemaFont.tiny(10))
@@ -929,24 +930,24 @@ private struct TrialPanel: View {
 
     var body: some View {
         PanelSection(title: "TRIALS",
-                         subtitle: model.isTrialRunning ? "拍摄中" : "参数试拍",
-                         help: "比较同一构图下的试拍，把选中的参数写回计划，也可以连同拍摄条件存入镜头档案。",
+                         subtitle: model.isTrialRunning ? L10n.text("拍摄中") : L10n.text("参数试拍"),
+                         help: L10n.text("比较同一构图下的试拍，把选中的参数写回计划，也可以连同拍摄条件存入镜头档案。"),
                          expandedByDefault: false) {
             HStack(spacing: 6) {
-                Button("快门试拍") { model.runShutterTrial() }
+                Button(L10n.text("快门试拍")) { model.runShutterTrial() }
                     .buttonStyle(CinemaButtonStyle(compact: true))
                     .disabled(model.isTrialRunning || model.isRunning)
-                Button("光圈试拍") { model.runApertureTrial() }
+                Button(L10n.text("光圈试拍")) { model.runApertureTrial() }
                     .buttonStyle(CinemaButtonStyle(compact: true))
                     .disabled(model.isTrialRunning || model.isRunning)
-                Button("包围试拍") { model.runBracketTrial() }
+                Button(L10n.text("包围试拍")) { model.runBracketTrial() }
                     .buttonStyle(CinemaButtonStyle(compact: true))
                     .disabled(model.isTrialRunning || model.isRunning)
                 Spacer()
             }
 
             if model.trialCandidates.isEmpty {
-                Text("暂无候选")
+                Text(L10n.text("暂无候选"))
                     .font(CinemaFont.tiny(10))
                     .foregroundStyle(palette.textDim)
             } else {
@@ -969,7 +970,7 @@ private struct TrialPanel: View {
                                     .font(CinemaFont.smallValue(11))
                                     .foregroundStyle(palette.text)
                                 if candidate.recommended {
-                                    StatusChip(text: "推荐", color: palette.amber)
+                                    StatusChip(text: L10n.text("推荐"), color: palette.amber)
                                 }
                             }
                             Text(metricText(candidate))
@@ -978,18 +979,18 @@ private struct TrialPanel: View {
                                 .lineLimit(1)
                         }
                         Spacer()
-                        Button("采用") { model.adoptTrial(candidate) }
+                        Button(L10n.text("采用")) { model.adoptTrial(candidate) }
                             .buttonStyle(CinemaButtonStyle(compact: true))
                     }
                 }
             }
 
             HStack(spacing: 6) {
-                Button("保存到镜头档案") { model.saveLensProfile() }
+                Button(L10n.text("保存到镜头档案")) { model.saveLensProfile() }
                     .buttonStyle(CinemaButtonStyle(compact: true))
                     .disabled(model.trialCandidates.isEmpty)
                 Spacer()
-                Text("\(model.lensProfileCount) 条档案")
+                Text(L10n.text("%@ 条档案", model.lensProfileCount))
                     .font(CinemaFont.tiny(10))
                     .foregroundStyle(palette.textDim)
             }
@@ -1001,11 +1002,11 @@ private struct TrialPanel: View {
         var parts: [String] = []
         if let metrics = candidate.metrics {
             parts.append(String(format: "FWHM %.2f", metrics.medianFWHM))
-            parts.append("\(metrics.starCount) 星")
-            parts.append(String(format: "饱和 %.3f%%", metrics.saturatedFraction * 100))
-            parts.append(String(format: "偏心 %.2f", metrics.medianEccentricity))
+            parts.append(L10n.text("%@ 星", metrics.starCount))
+            parts.append(String(format: L10n.text("饱和 %.3f%%"), metrics.saturatedFraction * 100))
+            parts.append(String(format: L10n.text("偏心 %.2f"), metrics.medianEccentricity))
         } else {
-            parts.append("无测量")
+            parts.append(L10n.text("无测量"))
         }
         return parts.joined(separator: "   ")
     }
@@ -1020,10 +1021,10 @@ private struct SimulatorPanel: View {
     var body: some View {
         if model.sourceKind == .simulator {
             PanelSection(title: "SIMULATOR",
-                         subtitle: "仿真",
-                         help: "试试薄云、焦点偏移或慢下载，看看拍摄中的画面和计数怎样变化。",
+                         subtitle: L10n.text("仿真"),
+                         help: L10n.text("试试薄云、焦点偏移或慢下载，看看拍摄中的画面和计数怎样变化。"),
                          expandedByDefault: false) {
-                Menu("场景：\(model.simulatorCondition.displayName)") {
+                Menu(L10n.text("场景：%@", model.simulatorCondition.displayName)) {
                     ForEach(SkyCondition.allCases, id: \.rawValue) { condition in
                         Button(condition.displayName) {
                             model.setSimulatorCondition(condition)
@@ -1033,7 +1034,7 @@ private struct SimulatorPanel: View {
                 .font(CinemaFont.label(11))
 
                 HStack {
-                    Text("焦点位置")
+                    Text(L10n.text("焦点位置"))
                         .font(CinemaFont.tiny(10))
                         .foregroundStyle(palette.textDim)
                     Slider(value: Binding(
@@ -1046,23 +1047,23 @@ private struct SimulatorPanel: View {
                 }
 
                 HStack(spacing: 5) {
-                    Button("复位焦点") { model.resetSimulatorFocus() }
+                    Button(L10n.text("复位焦点")) { model.resetSimulatorFocus() }
                         .buttonStyle(CinemaButtonStyle(compact: true))
-                    Button("曝光失败") {
-                        model.injectSimulatorFault(.failNextCapture("模拟曝光失败"))
+                    Button(L10n.text("曝光失败")) {
+                        model.injectSimulatorFault(.failNextCapture(L10n.text("模拟曝光失败")))
                     }
                     .buttonStyle(CinemaButtonStyle(compact: true))
-                    Button("设备忙 2s") {
+                    Button(L10n.text("设备忙 2s")) {
                         model.injectSimulatorFault(.busy(seconds: 2))
                     }
                     .buttonStyle(CinemaButtonStyle(compact: true))
                 }
                 HStack(spacing: 5) {
-                    Button("慢下载 3s") {
+                    Button(L10n.text("慢下载 3s")) {
                         model.injectSimulatorFault(.slowDownload(seconds: 3))
                     }
                     .buttonStyle(CinemaButtonStyle(compact: true))
-                    Button("拍 2 张后断连") {
+                    Button(L10n.text("拍 2 张后断连")) {
                         model.injectSimulatorFault(.disconnectAfter(2))
                     }
                     .buttonStyle(CinemaButtonStyle(compact: true))

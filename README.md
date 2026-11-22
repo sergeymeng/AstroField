@@ -20,6 +20,8 @@ swift run AstroField
 
 启动后就能在模拟星空里试拍。接真机时，将相机的 USB 模式设为 MTP/PTP，在窗口顶部的来源菜单选择 **Nikon USB**。要从 Finder 启动，可运行 `./scripts/build_app.sh`，然后打开 `dist/AstroField.app`。
 
+界面语言跟随 macOS。要单独改成英文，在「系统设置 → 通用 → 语言与地区 → 应用程序」为 AstroField 选择 English，然后重新打开。源码版可以直接用 `swift run AstroField -AppleLanguages '(en)'` 启动。
+
 ## 取景器里只有噪点时
 
 11 月 13 日夜拍时，Z7 II 传回的 LiveView JPEG 几乎看不出星点。在 **VIEWFINDER** 里调高「增益」、压低天空背景，可以把接近背景亮度的星点显出来。对焦仍用原始 JPEG 测量。

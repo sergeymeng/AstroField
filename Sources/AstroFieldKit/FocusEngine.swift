@@ -43,10 +43,10 @@ public enum FocusSearchStatus: String, Sendable, Equatable {
 
     public var displayText: String {
         switch self {
-        case .confirmed: return "已确认"
-        case .unconfirmed: return "尚未确认"
-        case .failed: return "失败"
-        case .cancelled: return "已取消"
+        case .confirmed: return L10n.text("已确认")
+        case .unconfirmed: return L10n.text("尚未确认")
+        case .failed: return L10n.text("失败")
+        case .cancelled: return L10n.text("已取消")
         }
     }
 }
@@ -123,7 +123,7 @@ public actor FocusSearcher {
             guard baseline.starCount >= config.minStars, baseline.medianFWHM > 0 else {
                 return finish(.unconfirmed, bestSteps: nil, baseline: baseline, best: nil,
                               confidence: 0,
-                              message: "星点不足 \(baseline.starCount)")
+                              message: L10n.text("星点不足 %@", baseline.starCount))
             }
 
             var best = baseline
@@ -132,7 +132,7 @@ public actor FocusSearcher {
             for direction in [1, -1] {
                 if shouldCancel() {
                     return finish(.cancelled, bestSteps: bestPos, baseline: baseline,
-                                  best: best, confidence: 0, message: "已取消")
+                                  best: best, confidence: 0, message: L10n.text("已取消"))
                 }
                 if position != 0 {
                     try await moveApproaching(0)
@@ -146,7 +146,7 @@ public actor FocusSearcher {
                 for _ in 0..<config.maxCoarseMovesPerDirection {
                     if shouldCancel() {
                         return finish(.cancelled, bestSteps: bestPos, baseline: baseline,
-                                      best: best, confidence: 0, message: "已取消")
+                                      best: best, confidence: 0, message: L10n.text("已取消"))
                     }
                     let delta = direction * config.coarseStep
                     try await probe.move(signedSteps: delta)
@@ -192,7 +192,7 @@ public actor FocusSearcher {
             for offset in offsets {
                 if shouldCancel() {
                     return finish(.cancelled, bestSteps: bestPos, baseline: baseline,
-                                  best: best, confidence: 0, message: "已取消")
+                                  best: best, confidence: 0, message: L10n.text("已取消"))
                 }
                 let target = bestPos + offset * config.fineStep
                 let delta = target - position
@@ -219,7 +219,7 @@ public actor FocusSearcher {
             for _ in 0..<max(1, config.verifySamples) {
                 if shouldCancel() {
                     return finish(.cancelled, bestSteps: fineBestPos, baseline: baseline,
-                                  best: fineBest, confidence: 0, message: "已取消")
+                                  best: fineBest, confidence: 0, message: L10n.text("已取消"))
                 }
                 verifications.append(try await probe.measure())
             }
@@ -244,22 +244,22 @@ public actor FocusSearcher {
             if verified.starCount >= config.minStars, improvement >= config.minImprovement {
                 return finish(.confirmed, bestSteps: fineBestPos, baseline: baseline,
                               best: verified, confidence: confidence,
-                              message: String(format: "已确认，FWHM 改善 %.0f%%，相对步数 %+d",
+                              message: String(format: L10n.text("已确认，FWHM 改善 %.0f%%，相对步数 %+d"),
                                               improvement * 100, fineBestPos))
             }
             if verified.starCount >= config.minStars, alreadyFocused {
                 return finish(.confirmed, bestSteps: 0, baseline: baseline,
                               best: verified, confidence: 0.5,
-                              message: String(format: "已在对焦位置，FWHM %.2f",
+                              message: String(format: L10n.text("已在对焦位置，FWHM %.2f"),
                                               verified.medianFWHM))
             }
             return finish(.unconfirmed, bestSteps: fineBestPos, baseline: baseline,
                           best: verified, confidence: confidence,
-                          message: String(format: "尚未确认，改善 %.0f%%（阈值 %.0f%%）",
+                          message: String(format: L10n.text("尚未确认，改善 %.0f%%（阈值 %.0f%%）"),
                                           improvement * 100, config.minImprovement * 100))
         } catch {
             return finish(.failed, bestSteps: nil, baseline: nil, best: nil,
-                          confidence: 0, message: "对焦失败：\(error)")
+                          confidence: 0, message: L10n.text("对焦失败：%@", error))
         }
     }
 

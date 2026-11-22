@@ -1,3 +1,4 @@
+import AstroFieldKit
 import SwiftUI
 import AppKit
 
@@ -70,27 +71,27 @@ struct AstroFieldApp: App {
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1440, height: 900)
         .commands {
-            CommandMenu("拍摄") {
-                Button(model.isRunning ? (model.isPaused ? "继续" : "暂停") : "开始") {
+            CommandMenu(L10n.text("拍摄")) {
+                Button(model.isRunning ? (model.isPaused ? L10n.text("继续") : L10n.text("暂停")) : L10n.text("开始")) {
                     model.toggleStartPause()
                 }
                 .keyboardShortcut(.space, modifiers: [])
-                Button("停止") { model.stopSequence() }
+                Button(L10n.text("停止")) { model.stopSequence() }
                     .keyboardShortcut(.escape, modifiers: [])
                 Divider()
-                Button("试拍一张") { model.captureOnce() }
+                Button(L10n.text("试拍一张")) { model.captureOnce() }
                     .keyboardShortcut(.return, modifiers: [.command])
-                Button("自动对焦") { model.runAutoFocus() }
+                Button(L10n.text("自动对焦")) { model.runAutoFocus() }
                     .keyboardShortcut("f", modifiers: [.command])
             }
-            CommandMenu("视图") {
-                Toggle("九宫格", isOn: $model.showGrid)
+            CommandMenu(L10n.text("视图")) {
+                Toggle(L10n.text("九宫格"), isOn: $model.showGrid)
                     .keyboardShortcut("g", modifiers: [.command])
-                Toggle("星点标记", isOn: $model.showStarMarkers)
+                Toggle(L10n.text("星点标记"), isOn: $model.showStarMarkers)
                     .keyboardShortcut("s", modifiers: [.command, .shift])
-                Toggle("夜间模式", isOn: $model.nightMode)
+                Toggle(L10n.text("夜间模式"), isOn: $model.nightMode)
                     .keyboardShortcut("n", modifiers: [.command])
-                Toggle("右侧面板", isOn: $model.rightPanelVisible)
+                Toggle(L10n.text("右侧面板"), isOn: $model.rightPanelVisible)
                     .keyboardShortcut("0", modifiers: [.command])
             }
         }

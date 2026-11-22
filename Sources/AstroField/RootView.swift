@@ -153,7 +153,7 @@ struct StatusBarView: View {
             Button {
                 Task { await model.connect(.simulator) }
             } label: {
-                Label("模拟相机", systemImage: "sparkles")
+                Label(L10n.text("模拟相机"), systemImage: "sparkles")
             }
             Button {
                 Task { await model.connect(.nikon) }
@@ -163,10 +163,10 @@ struct StatusBarView: View {
             Button {
                 model.choosePlaybackDirectory()
             } label: {
-                Label("照片回放…", systemImage: "folder")
+                Label(L10n.text("照片回放…"), systemImage: "folder")
             }
             Divider()
-            Button("断开") { model.disconnect() }
+            Button(L10n.text("断开")) { model.disconnect() }
         } label: {
             HStack(spacing: 7) {
                 Text(model.sourceLabel.uppercased())
@@ -197,30 +197,30 @@ struct StatusBarView: View {
 
     private func phaseInfo(_ phase: SequenceProgress.Phase) -> (String, Color) {
         switch phase {
-        case .idle: return ("待机", palette.textDim)
-        case .waitingToStart: return ("等待开始", palette.amber)
-        case .exposing: return ("曝光中", palette.red)
-        case .waitingInterval: return ("等待间隔", palette.amber)
-        case .paused: return ("已暂停", palette.amber)
-        case .stopping: return ("停止中", palette.amber)
-        case .finished: return ("已完成", palette.textSecondary)
-        case .stopped: return ("已停止", palette.textSecondary)
-        case .failed: return ("失败", palette.red)
+        case .idle: return (L10n.text("待机"), palette.textDim)
+        case .waitingToStart: return (L10n.text("等待开始"), palette.amber)
+        case .exposing: return (L10n.text("曝光中"), palette.red)
+        case .waitingInterval: return (L10n.text("等待间隔"), palette.amber)
+        case .paused: return (L10n.text("已暂停"), palette.amber)
+        case .stopping: return (L10n.text("停止中"), palette.amber)
+        case .finished: return (L10n.text("已完成"), palette.textSecondary)
+        case .stopped: return (L10n.text("已停止"), palette.textSecondary)
+        case .failed: return (L10n.text("失败"), palette.red)
         }
     }
 
     private var toolbar: some View {
         HStack(spacing: 2) {
-            iconButton(systemName: "grid", active: model.showGrid, help: "九宫格") {
+            iconButton(systemName: "grid", active: model.showGrid, help: L10n.text("九宫格")) {
                 model.showGrid.toggle()
             }
-            iconButton(systemName: "scope", active: model.showStarMarkers, help: "星点标记") {
+            iconButton(systemName: "scope", active: model.showStarMarkers, help: L10n.text("星点标记")) {
                 model.showStarMarkers.toggle()
             }
-            iconButton(systemName: "moon", active: model.nightMode, help: "夜间模式") {
+            iconButton(systemName: "moon", active: model.nightMode, help: L10n.text("夜间模式")) {
                 model.nightMode.toggle()
             }
-            iconButton(systemName: "sidebar.right", active: model.rightPanelVisible, help: "右侧面板") {
+            iconButton(systemName: "sidebar.right", active: model.rightPanelVisible, help: L10n.text("右侧面板")) {
                 model.rightPanelVisible.toggle()
             }
         }
@@ -258,12 +258,12 @@ struct BottomBarView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
             } else {
-                Text("就绪")
+                Text(L10n.text("就绪"))
                     .font(CinemaFont.tiny(9.5))
                     .foregroundStyle(palette.textDim)
             }
             Spacer(minLength: 12)
-            Text("\(model.records.count) 张，\(model.records.filter { $0.verdict?.isAccepted == true }.count) 合格")
+            Text(L10n.text("%@ 张，%@ 合格", model.records.count, model.records.filter { $0.verdict?.isAccepted == true }.count))
                 .font(CinemaFont.micro(9))
                 .monospacedDigit()
                 .tracking(0.4)
@@ -271,7 +271,7 @@ struct BottomBarView: View {
             Button {
                 showLogs.toggle()
             } label: {
-                Text("日志")
+                Text(L10n.text("日志"))
                     .font(CinemaFont.micro(9))
                     .tracking(0.8)
                     .foregroundStyle(palette.textSecondary)

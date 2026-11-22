@@ -33,16 +33,16 @@ public enum DarkLibraryError: Error, Equatable, Sendable, CustomStringConvertibl
     public var description: String {
         switch self {
         case .indexCorrupted(let path):
-            return "暗场索引损坏：\(path)"
+            return L10n.text("暗场索引损坏：%@", path)
         case .ioFailed(let why):
-            return "暗场文件读写失败：\(why)"
+            return L10n.text("暗场文件读写失败：%@", why)
         case .invalidFrame:
-            return "暗场帧无效"
+            return L10n.text("暗场帧无效")
         case .frameSizeMismatch(let expectedWidth, let expectedHeight,
                                 let gotWidth, let gotHeight):
-            return "暗场帧尺寸不一致：期望 \(expectedWidth)×\(expectedHeight)，实际 \(gotWidth)×\(gotHeight)"
+            return L10n.text("暗场帧尺寸不一致：期望 %@×%@，实际 %@×%@", expectedWidth, expectedHeight, gotWidth, gotHeight)
         case .settingsMismatch:
-            return "暗场帧曝光参数不一致"
+            return L10n.text("暗场帧曝光参数不一致")
         }
     }
 }

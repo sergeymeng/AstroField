@@ -9,20 +9,20 @@ struct FilmstripView: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 if model.groupModeActive {
-                    Text("分组累计")
+                    Text(L10n.text("分组累计"))
                         .font(CinemaFont.micro(8))
                         .tracking(0.6)
                         .foregroundStyle(palette.textDim)
                     separator
                 }
-                counter("曝光", model.displayedExposed)
+                counter(L10n.text("曝光"), model.displayedExposed)
                 separator
-                counter("保存", model.displayedSaved)
+                counter(L10n.text("已保存"), model.displayedSaved)
                 separator
-                counter("失败", model.displayedFailed,
+                counter(L10n.text("失败"), model.displayedFailed,
                         color: model.displayedFailed > 0 ? palette.red : nil)
                 separator
-                counter("合格", model.quality.qualified)
+                counter(L10n.text("合格"), model.quality.qualified)
                 if let target = model.quality.qualifiedTarget {
                     Text("/\(target)")
                         .font(CinemaFont.micro(9))
@@ -34,7 +34,7 @@ struct FilmstripView: View {
                 Spacer(minLength: 12)
 
                 if model.isRunning, let end = model.progress.expectedEnd {
-                    Text("结束 \(timeString(end))")
+                    Text(L10n.text("结束 %@", timeString(end)))
                         .font(CinemaFont.micro(8.5))
                         .tracking(0.6)
                         .monospacedDigit()
@@ -60,7 +60,7 @@ struct FilmstripView: View {
 
             if model.records.isEmpty {
                 HStack {
-                    Text("无素材")
+                    Text(L10n.text("无素材"))
                         .font(CinemaFont.micro(9))
                         .tracking(1.2)
                         .foregroundStyle(palette.textDim)

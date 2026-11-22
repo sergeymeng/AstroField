@@ -59,21 +59,21 @@ public final class LiveStacker: @unchecked Sendable {
         let frame = image.downsampled(maxWidth: width)
         guard frame.width == width, frame.height == height else {
             rejectedCount += 1
-            return snapshot(accepted: false, reason: "尺寸不一致", shift: nil)
+            return snapshot(accepted: false, reason: L10n.text("尺寸不一致"), shift: nil)
         }
         let stars = StarDetector.detect(in: frame, maxStars: 40)
         guard stars.count >= minStarsForAlignment else {
             rejectedCount += 1
-            return snapshot(accepted: false, reason: "星点不足，未参与叠加", shift: nil)
+            return snapshot(accepted: false, reason: L10n.text("星点不足，未参与叠加"), shift: nil)
         }
         guard let shift = estimateShift(referenceStars: referenceStars, newStars: stars) else {
             rejectedCount += 1
-            return snapshot(accepted: false, reason: "无法估计平移，未参与叠加", shift: nil)
+            return snapshot(accepted: false, reason: L10n.text("无法估计平移，未参与叠加"), shift: nil)
         }
         if abs(shift.dx) > maxShift || abs(shift.dy) > maxShift {
             rejectedCount += 1
             return snapshot(accepted: false,
-                            reason: "位移过大（\(shift.dx), \(shift.dy)），可能已换构图",
+                            reason: L10n.text("位移过大（%@, %@），可能已换构图", shift.dx, shift.dy),
                             shift: shift)
         }
 

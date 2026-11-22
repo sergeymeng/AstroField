@@ -4,7 +4,7 @@
 
 AstroField lets you focus a USB-connected Nikon on a star and shoot a sequence from your Mac. As each NEF comes in, you can open its corner crops and check whether the stars are starting to trail.
 
-![Simulator view with the brightest star marked by a crosshair](docs/screenshots/23-findstar.png)
+![Simulator view with the brightest star marked by a crosshair](docs/screenshots/23-findstar-en.png)
 
 *The simulator in star-finding mode. The crosshair marks the brightest star. The panel on the right shows its peak intensity and full width at half maximum (FWHM).*
 
@@ -20,11 +20,13 @@ swift run AstroField
 
 The simulator opens on launch, so you can try a sequence straight away. To use a camera, set its USB mode to MTP/PTP and select **Nikon USB** from the source menu at the top of the window. For a Finder app, run `./scripts/build_app.sh` and open `dist/AstroField.app`.
 
+AstroField follows your macOS app language. To launch in English from the terminal, use `swift run AstroField -AppleLanguages '(en)'`. For the Finder app, choose English for AstroField in System Settings → General → Language & Region → Applications, then reopen it.
+
 ## When the viewfinder looks like noise
 
 On a night shoot on 13 November, stars were barely visible in the LiveView JPEGs from the Z7 II. The **VIEWFINDER** panel lets you raise the gain and set the black point to bring faint stars out of the background. Focus measurements use the original JPEG.
 
-Select **找星模式** (Find stars) to switch temporarily to ISO 12800. If LiveView still shows no stars, AstroField takes a single 2-second JPEG for framing and keeps it out of the capture sequence. With an MFDrive lens, **对焦最亮星** focuses on the brightest star. Select **退出找星** when you're ready to return to your capture settings.
+Select **Find stars** to switch temporarily to ISO 12800. If LiveView still shows no stars, AstroField takes a single 2-second JPEG for framing and keeps it out of the capture sequence. With an MFDrive lens, **Focus brightest star** focuses on the brightest star. Select **Exit star finder** when you're ready to return to your capture settings.
 
 ## After the shoot
 

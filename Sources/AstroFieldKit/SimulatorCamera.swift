@@ -6,7 +6,7 @@ import CoreGraphics
 public final class SimulatorCamera: CameraDevice, @unchecked Sendable {
     public let id = UUID()
     public var kind: CameraKind { .simulator }
-    public var displayName: String { "模拟星空相机" }
+    public var displayName: String { L10n.text("模拟星空相机") }
 
     private let lock = NSLock()
     private var statusStorage: CameraStatus
@@ -45,7 +45,7 @@ public final class SimulatorCamera: CameraDevice, @unchecked Sendable {
                                           lens: "SIM 35mm f/2.8",
                                           batteryPercent: nil,
                                           capabilities: Self.allCapabilities,
-                                          notes: ["模拟设备：数值与图像均为仿真，不代表真实相机读数"])
+                                          notes: [L10n.text("当前画面和读数来自模拟相机")])
     }
 
     public static let allCapabilities: Set<CameraCapability> = [
@@ -61,7 +61,7 @@ public final class SimulatorCamera: CameraDevice, @unchecked Sendable {
                                firmware: "sim-1", lens: "SIM 35mm f/2.8",
                                batteryPercent: batteryPercent,
                                capabilities: Self.allCapabilities,
-                               notes: ["模拟设备：数值与图像均为仿真，不代表真实相机读数"]))
+                               notes: [L10n.text("当前画面和读数来自模拟相机")]))
         if simulateTiming { try? await sleep(0.35) }
         connectedAt = Date()
         captureCount = 0
@@ -69,7 +69,7 @@ public final class SimulatorCamera: CameraDevice, @unchecked Sendable {
                                firmware: "sim-1", lens: "SIM 35mm f/2.8",
                                batteryPercent: batteryPercent,
                                capabilities: Self.allCapabilities,
-                               notes: ["模拟设备：数值与图像均为仿真，不代表真实相机读数"]))
+                               notes: [L10n.text("当前画面和读数来自模拟相机")]))
     }
 
     public func disconnect() async {
@@ -77,7 +77,7 @@ public final class SimulatorCamera: CameraDevice, @unchecked Sendable {
         connectedAt = nil
         setStatus(CameraStatus(state: .disconnected, model: "AstroField Simulator",
                                capabilities: Self.allCapabilities,
-                               notes: ["模拟设备已断开"]))
+                               notes: [L10n.text("模拟设备已断开")]))
     }
 
     // MARK: - Settings
@@ -88,10 +88,10 @@ public final class SimulatorCamera: CameraDevice, @unchecked Sendable {
             throw CameraError.unsupported("ISO \(settings.iso)")
         }
         guard settings.exposureSeconds > 0, settings.exposureSeconds <= 900 else {
-            throw CameraError.unsupported("曝光 \(settings.exposureSeconds)s")
+            throw CameraError.unsupported(L10n.text("曝光 %@s", settings.exposureSeconds))
         }
         if let aperture = settings.aperture, !(1.0...22.0).contains(aperture) {
-            throw CameraError.unsupported("光圈 f/\(aperture)")
+            throw CameraError.unsupported(L10n.text("光圈 f/%@", aperture))
         }
         lock.lock()
         self.settings = settings
@@ -117,10 +117,10 @@ public final class SimulatorCamera: CameraDevice, @unchecked Sendable {
                 if captureCount >= count {
                     lock.unlock()
                     liveViewOn = false
-                    setStatus(CameraStatus(state: .error("模拟断连"),
+                    setStatus(CameraStatus(state: .error(L10n.text("模拟断连")),
                                            model: "AstroField Simulator",
                                            capabilities: Self.allCapabilities,
-                                           notes: ["模拟断连"]))
+                                           notes: [L10n.text("模拟断连")]))
                     throw CameraError.disconnected
                 }
             }
@@ -162,7 +162,7 @@ public final class SimulatorCamera: CameraDevice, @unchecked Sendable {
                                  preview: preview,
                                  thumbnail: thumbnail,
                                  analysisLuma: luma,
-                                 note: "模拟图像，\(sceneSnapshot.condition.displayName)")
+                                 note: L10n.text("模拟图像，%@", sceneSnapshot.condition.displayName))
         lock.lock()
         captureCount += 1
         lastCapture = record
@@ -242,7 +242,7 @@ public final class SimulatorCamera: CameraDevice, @unchecked Sendable {
         guard status.capabilities.contains(.manualFocusDrive) else {
             throw CameraError.unsupported("MFDrive")
         }
-        guard steps >= 0 else { throw CameraError.unsupported("负步数") }
+        guard steps >= 0 else { throw CameraError.unsupported(L10n.text("负步数")) }
         if simulateTiming { try? await sleep(focusModel.responseDelay) }
         lock.lock()
         focusModel.move(direction: direction, steps: steps)

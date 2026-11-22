@@ -23,7 +23,7 @@ final class QualityEngineTests: XCTestCase {
         _ = engine.observe(metrics(fwhm: 3.0))
         let result = engine.observe(metrics(fwhm: 4.5, background: 2200))
         if case .warning(let text) = result.verdict {
-            XCTAssertTrue(text.contains("背景"))
+            XCTAssertEqual(text, String(format: L10n.text("背景变化 %.0f%%"), 120.0))
         } else {
             XCTFail("expected background warning")
         }

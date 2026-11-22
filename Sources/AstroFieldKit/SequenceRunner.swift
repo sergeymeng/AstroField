@@ -178,7 +178,7 @@ public actor SequenceRunner {
         let warnings = ScheduleCalculator.preflight(plan: plan)
         progress.issues = warnings
         if !warnings.isEmpty {
-            progress.message = warnings.joined(separator: "；")
+            progress.message = warnings.joined(separator: L10n.text("；"))
             emit(.progress(progress))
         }
 
@@ -198,7 +198,7 @@ public actor SequenceRunner {
             if paused {
                 progress.phase = .paused
                 progress.nextStart = nil
-                progress.message = "已暂停（拍完当前张）"
+                progress.message = L10n.text("已暂停（拍完当前张）")
                 emit(.progress(progress))
                 while paused && !stopRequested {
                     try? await clock.sleep(seconds: 0.1)
@@ -207,7 +207,7 @@ public actor SequenceRunner {
                 nextStart = clock.now.addingTimeInterval(0.5)
                 lastPlanned = nextStart
                 progress.phase = .waitingInterval
-                progress.message = "已继续"
+                progress.message = L10n.text("已继续")
                 emit(.progress(progress))
             }
 
@@ -216,7 +216,7 @@ public actor SequenceRunner {
                 progress.phase = frame == 0 ? .waitingToStart : .waitingInterval
                 progress.nextStart = nextStart
                 progress.exposureEnd = nil
-                progress.message = frame == 0 ? "等待开始" : "等待下一张"
+                progress.message = frame == 0 ? L10n.text("等待开始") : L10n.text("等待下一张")
                 emit(.progress(progress))
                 var remaining = wait
                 while remaining > 0 && !stopRequested && !paused {
@@ -259,7 +259,7 @@ public actor SequenceRunner {
             progress.phase = .exposing
             progress.nextStart = nil
             progress.exposureEnd = clock.now.addingTimeInterval(frameSettings.exposureSeconds)
-            progress.message = String(format: "曝光 %.1f 秒", frameSettings.exposureSeconds)
+            progress.message = String(format: L10n.text("曝光 %.1f 秒"), frameSettings.exposureSeconds)
             emit(.progress(progress))
 
             capturing = true
@@ -271,7 +271,7 @@ public actor SequenceRunner {
             } catch {
                 progress.failed += 1
                 progress.lastError = String(describing: error)
-                emit(.failed(index: frame, message: progress.lastError ?? "未知错误"))
+                emit(.failed(index: frame, message: progress.lastError ?? L10n.text("未知错误")))
             }
             capturing = false
             frame += 1
@@ -290,7 +290,7 @@ public actor SequenceRunner {
         progress.phase = stopRequested ? .stopped : .finished
         progress.nextStart = nil
         progress.exposureEnd = nil
-        progress.message = stopRequested ? "已停止" : "计划完成"
+        progress.message = stopRequested ? L10n.text("已停止") : L10n.text("计划完成")
         emit(.progress(progress))
         emit(.finished(progress))
     }
@@ -298,22 +298,22 @@ public actor SequenceRunner {
     // MARK: - Timing
 
     private func fatalIssue() -> String? {
-        if plan.exposureSeconds <= 0 { return "曝光时间必须大于 0" }
+        if plan.exposureSeconds <= 0 { return L10n.text("曝光时间必须大于 0") }
         switch plan.interval {
         case .fixedStart(let seconds) where seconds <= 0:
-            return "固定间隔必须大于 0"
+            return L10n.text("固定间隔必须大于 0")
         case .afterExposure(let seconds) where seconds < 0:
-            return "曝光后等待不能为负"
+            return L10n.text("曝光后等待不能为负")
         default:
             break
         }
         switch plan.end {
         case .count(let count) where count <= 0:
-            return "目标张数必须大于 0"
+            return L10n.text("目标张数必须大于 0")
         case .duration(let seconds) where seconds <= 0:
-            return "持续时长必须大于 0"
+            return L10n.text("持续时长必须大于 0")
         case .at(let date) where date < clock.now:
-            return "结束时刻已经过去"
+            return L10n.text("结束时刻已经过去")
         default:
             break
         }
@@ -332,7 +332,7 @@ public actor SequenceRunner {
                 return candidate
             }
             if plan.policy == .shift {
-                progress.message = "设备忙或下载较慢，后续时间点已顺延"
+                progress.message = L10n.text("设备忙或下载较慢，后续时间点已顺延")
                 return now.addingTimeInterval(guardTime)
             }
             var skipped = 0
@@ -342,7 +342,7 @@ public actor SequenceRunner {
                 if skipped > 100_000 { break }
             }
             if skipped > 0 {
-                progress.message = "跳过 \(skipped) 个固定时间点"
+                progress.message = L10n.text("跳过 %@ 个固定时间点", skipped)
             }
             return candidate
         }

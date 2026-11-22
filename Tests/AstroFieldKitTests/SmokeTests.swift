@@ -8,7 +8,7 @@ final class SmokeTests: XCTestCase {
         plan.exposureSeconds = 15
         plan.interval = .fixedStart(seconds: 20)
         plan.end = .count(3)
-        XCTAssertTrue(plan.summary.contains("10 秒后开始"))
+        XCTAssertTrue(plan.summary.contains(L10n.text("%@后开始", CapturePlan.formatDuration(10))))
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let times = ScheduleCalculator.theoreticalStartTimes(plan: plan, now: start)
         XCTAssertEqual(times.count, 3)

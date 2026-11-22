@@ -9,8 +9,8 @@ public enum CameraKind: String, Codable, Sendable, CaseIterable {
 
     public var displayName: String {
         switch self {
-        case .simulator: return "模拟相机"
-        case .playback: return "照片回放"
+        case .simulator: return L10n.text("模拟相机")
+        case .playback: return L10n.text("照片回放")
         case .nikon: return "Nikon USB"
         }
     }
@@ -31,15 +31,15 @@ public enum CameraCapability: String, Codable, Sendable, CaseIterable {
     public var displayName: String {
         switch self {
         case .liveView: return "LiveView"
-        case .stillCapture: return "单张拍摄"
+        case .stillCapture: return L10n.text("单张拍摄")
         case .bulbCapture: return "Bulb"
         case .rawOutput: return "RAW"
         case .isoControl: return "ISO"
-        case .shutterControl: return "快门"
-        case .apertureControl: return "光圈"
+        case .shutterControl: return L10n.text("快门")
+        case .apertureControl: return L10n.text("光圈")
         case .manualFocusDrive: return "MFDrive"
-        case .monitorControl: return "关屏"
-        case .batteryStatus: return "电量"
+        case .monitorControl: return L10n.text("关屏")
+        case .batteryStatus: return L10n.text("电量")
         }
     }
 }
@@ -71,14 +71,14 @@ public enum CameraState: Equatable, Sendable {
 
     public var displayText: String {
         switch self {
-        case .disconnected: return "未连接"
-        case .connecting: return "连接中"
-        case .connected: return "已连接"
-        case .busy(let what): return "忙碌：\(what)"
-        case .error(let message): return "错误：\(message)"
+        case .disconnected: return L10n.text("未连接")
+        case .connecting: return L10n.text("连接中")
+        case .connected: return L10n.text("已连接")
+        case .busy(let what): return L10n.text("忙碌：%@", what)
+        case .error(let message): return L10n.text("错误：%@", message)
         case .reconnecting(let attempt, let maxAttempts):
-            return attempt > 0 ? "重连中 \(attempt)/\(maxAttempts)" : "重连中"
-        case .recovered: return "已恢复"
+            return attempt > 0 ? L10n.text("重连中 %@/%@", attempt, maxAttempts) : L10n.text("重连中")
+        case .recovered: return L10n.text("已恢复")
         }
     }
 }
@@ -133,7 +133,7 @@ public enum CompressionChoice: String, Codable, Sendable, CaseIterable {
     public var displayName: String {
         switch self {
         case .raw: return "RAW"
-        case .jpegFine: return "JPEG 精细"
+        case .jpegFine: return L10n.text("JPEG 精细")
         }
     }
 }
@@ -154,12 +154,12 @@ public enum CameraError: Error, CustomStringConvertible, Equatable {
 
     public var description: String {
         switch self {
-        case .unsupported(let what): return "设备不支持：\(what)"
-        case .disconnected: return "相机未连接"
-        case .busy(let what): return "相机忙碌：\(what)"
-        case .captureFailed(let why): return "拍摄失败：\(why)"
-        case .downloadFailed(let why): return "下载失败：\(why)"
-        case .io(let why): return "文件错误：\(why)"
+        case .unsupported(let what): return L10n.text("设备不支持：%@", what)
+        case .disconnected: return L10n.text("相机未连接")
+        case .busy(let what): return L10n.text("相机忙碌：%@", what)
+        case .captureFailed(let why): return L10n.text("拍摄失败：%@", why)
+        case .downloadFailed(let why): return L10n.text("下载失败：%@", why)
+        case .io(let why): return L10n.text("文件错误：%@", why)
         }
     }
 }
@@ -289,7 +289,7 @@ public protocol CameraDevice: AnyObject, Sendable {
 public extension CameraDevice {
     /// Default: the backend cannot control the camera screen.
     func setScreen(on: Bool) async throws {
-        throw CameraError.unsupported("相机屏控制")
+        throw CameraError.unsupported(L10n.text("相机屏控制"))
     }
 
     /// Default: no separate display frame.

@@ -77,7 +77,7 @@ final class AutoExposureTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.samples.count, 2)
         XCTAssertLessThan(result.settings.exposureSeconds, 2)
         XCTAssertFalse(result.status.isRecommended)
-        XCTAssertTrue(result.status.displayText.contains("偏心"),
+        XCTAssertTrue(result.status.displayText.contains(String(format: L10n.text("偏心 %.2f（拖线）"), 0.6)),
                       result.status.displayText)
     }
 
@@ -94,7 +94,7 @@ final class AutoExposureTests: XCTestCase {
             focalLengthMM: 35,
             probe: probe(camera))
         XCTAssertFalse(result.status.isRecommended)
-        XCTAssertTrue(result.status.displayText.contains("星点不足"),
+        XCTAssertTrue(result.status.displayText.contains(L10n.text("星点不足 %@（需 %@）", result.samples.last?.metrics.starCount ?? -1, AutoExposureConfig().minStars)),
                       result.status.displayText)
     }
 
@@ -111,7 +111,7 @@ final class AutoExposureTests: XCTestCase {
             focalLengthMM: 35,
             probe: probe)
         XCTAssertFalse(result.status.isRecommended)
-        XCTAssertTrue(result.status.displayText.contains("解码异常"),
+        XCTAssertTrue(result.status.displayText.contains(String(format: L10n.text("解码异常：背景 %.0f，无法评估（Core Image RAW 限制）"), 0.0)),
                       result.status.displayText)
         XCTAssertEqual(result.samples.count, 1)
     }

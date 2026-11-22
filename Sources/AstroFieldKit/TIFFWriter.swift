@@ -13,9 +13,9 @@ public enum TIFFWriterError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .imageTooLarge(let width, let height):
-            return "图像尺寸无法写入 TIFF：\(width)×\(height)"
+            return L10n.text("图像尺寸无法写入 TIFF：%@×%@", width, height)
         case .pngEncodingFailed(let url):
-            return "PNG 写入失败：\(url.lastPathComponent)"
+            return L10n.text("PNG 写入失败：%@", url.lastPathComponent)
         }
     }
 }

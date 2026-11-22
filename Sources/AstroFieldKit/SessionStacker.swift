@@ -22,7 +22,7 @@ public struct SessionStackSummary: Sendable, Equatable {
         return rejectedReasons
             .sorted { $0.value > $1.value }
             .map { "\($0.key) ×\($0.value)" }
-            .joined(separator: "，")
+            .joined(separator: L10n.text("，"))
     }
 }
 
@@ -65,7 +65,7 @@ public final class SessionStacker: @unchecked Sendable {
             if let shift = update.shift { lastShift = shift }
             lastCoverage = update.coverage
         } else {
-            let reason = update.reason ?? "未参与叠加"
+            let reason = update.reason ?? L10n.text("未参与叠加")
             rejectedReasons[reason, default: 0] += 1
         }
         return update.accepted

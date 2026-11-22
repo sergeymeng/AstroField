@@ -152,7 +152,7 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
         self.outputDirectory = outputDirectory ?? NikonCamera.defaultOutputDirectory()
         self.statusStorage = CameraStatus(state: .disconnected, model: "Nikon",
                                           capabilities: [],
-                                          notes: ["尚未连接"])
+                                          notes: [L10n.text("尚未连接")])
         engine.log = { [weak self] line in
             guard let self else { return }
             self.lastLog = line
@@ -161,6 +161,28 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
                 || lower.contains("error") || lower.contains("failed") {
                 self.onDiagnostic?(line)
             }
+        }
+    }
+
+    public static func connectionMessage(for error: Error) -> String {
+        guard let icc = error as? ICCError else { return String(describing: error) }
+        switch icc {
+        case .noCamera:
+            return L10n.text("找不到相机。请检查 USB 数据线和机身的 MTP/PTP 设置。")
+        case .notConnected:
+            return L10n.text("相机会话已关闭。请确认机身已开机。")
+        case .sessionFailed(let detail):
+            return L10n.text("无法打开相机会话：%@", detail)
+        case .timeout(let operation):
+            return L10n.text("相机响应超时：%@", operation)
+        case .transport(let detail):
+            return L10n.text("USB 传输中断：%@", detail)
+        case .ptp(let opcode, let response):
+            return String(format: L10n.text("PTP 命令 0x%04X 失败，机身返回 0x%04X"), opcode, response)
+        case .invalidResponse(let detail):
+            return L10n.text("机身返回了无法识别的数据：%@", detail)
+        case .fileIO(let detail):
+            return L10n.text("相机文件读写失败：%@", detail)
         }
     }
 
@@ -183,15 +205,15 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
     public func connect() async throws {
         let gen = beginGeneration()
         setStatus(CameraStatus(state: .connecting, model: "Nikon",
-                               capabilities: [], notes: ["正在打开 ICC 会话"]))
+                               capabilities: [], notes: [L10n.text("正在打开 ICC 会话")]))
         await engine.start()
         do {
             let status = try await openSession(probeCapabilities: true, timeout: 15)
             guard isCurrent(gen) else { throw CameraError.disconnected }
             finishSessionOpen(status)
         } catch {
-            setStatus(CameraStatus(state: .error(String(describing: error)), model: "Nikon",
-                                   capabilities: [], notes: ["连接失败：\(lastLog ?? "")"]))
+            setStatus(CameraStatus(state: .error(Self.connectionMessage(for: error)), model: "Nikon",
+                                   capabilities: [], notes: [L10n.text("连接失败：%@", lastLog ?? "")]))
             await closeICCSession()
             await engine.stop()
             throw error
@@ -205,7 +227,7 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
         lock.lock()
         guard !reconnecting else {
             lock.unlock()
-            throw CameraError.busy("正在重连")
+            throw CameraError.busy(L10n.text("正在重连"))
         }
         reconnecting = true
         generation &+= 1
@@ -252,7 +274,7 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
         await engine.stop()
         lock.lock(); liveViewOn = false; lock.unlock()
         setStatus(CameraStatus(state: .disconnected, model: "Nikon",
-                               capabilities: [], notes: ["已断开"]))
+                               capabilities: [], notes: [L10n.text("已断开")]))
     }
 
     // MARK: - Settings
@@ -276,7 +298,7 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
             }
             lock.lock(); self.settings = settings; lock.unlock()
         } catch {
-            throw CameraError.unsupported("设置参数失败：\(error)")
+            throw CameraError.unsupported(L10n.text("设置参数失败：%@", error))
         }
     }
 
@@ -307,7 +329,7 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
                                isRaw: settings.compression == .raw,
                                metrics: nil,
                                preview: nil,
-                               note: "Nikon USB，\(result.0.lastPathComponent)")
+                               note: L10n.text("Nikon USB，%@", result.0.lastPathComponent))
         } catch {
             throw CameraError.captureFailed(String(describing: error))
         }
@@ -361,7 +383,7 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
     public func focusDrive(direction: FocusDirection, steps: Int) async throws {
         guard status.state.isConnected else { throw CameraError.disconnected }
         guard status.capabilities.contains(.manualFocusDrive) else {
-            throw CameraError.unsupported("MFDrive（镜头能力未确认）")
+            throw CameraError.unsupported(L10n.text("MFDrive（镜头能力未确认）"))
         }
         try await engine.perform { camera in
             let wasLive = camera.isLiveViewActive
@@ -388,7 +410,7 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
                 }
             }
         } catch {
-            throw CameraError.unsupported("相机屏控制失败：\(error)")
+            throw CameraError.unsupported(L10n.text("相机屏控制失败：%@", error))
         }
     }
 
@@ -425,7 +447,7 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
         }
         guard let image = ImageLoader.preview(url: url, maxWidth: 2200),
               let luma = ImageLoader.luma(url: url, maxWidth: 2200) else {
-            throw CameraError.io("无法读取找星试拍的 JPEG")
+            throw CameraError.io(L10n.text("无法读取找星试拍的 JPEG"))
         }
         return FinderFrame(image: image, luma: luma)
     }
@@ -443,13 +465,13 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
         let current = statusStorage
         lock.unlock()
 
-        let lost = CameraStatus(state: .error("ICC 会话已关闭"),
+        let lost = CameraStatus(state: .error(L10n.text("ICC 会话已关闭")),
                                 model: current.model,
                                 firmware: current.firmware,
                                 lens: current.lens,
                                 batteryPercent: current.batteryPercent,
                                 capabilities: current.capabilities,
-                                notes: ["ICC 会话断开：\(reason)"])
+                                notes: [L10n.text("ICC 会话断开：%@", reason)])
         setStatus(lost)
         onDiagnostic?("session lost: \(reason)")
         onSessionLost?(reason)
@@ -497,9 +519,9 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
             var notes: [String] = ["ICC PTP passthrough"]
             do {
                 try camera.setCameraMode(remote: true)
-                notes.append("remote mode：主机参数生效")
+                notes.append(L10n.text("remote mode：主机参数生效"))
             } catch {
-                notes.append("remote mode 切换失败")
+                notes.append(L10n.text("remote mode 切换失败"))
             }
             // A body that closes the session during setup must not be reported
             // as connected.
@@ -508,7 +530,7 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
 
             if !probeCapabilities {
                 let previous = self.status
-                notes.append("ICC 会话已恢复")
+                notes.append(L10n.text("ICC 会话已恢复"))
                 return CameraStatus(state: .connected,
                                     model: camera.deviceName ?? previous.model,
                                     firmware: previous.firmware,
@@ -535,7 +557,7 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
                (try? camera.setUInt16(PTPProperty.fNumber, aperture)) != nil {
                 caps.insert(.apertureControl)
                 caps.insert(.manualFocusDrive)
-                notes.append("MFDrive 未自动探测（避免移动镜头）；Z7 II 100 步已实测")
+                notes.append(L10n.text("MFDrive 未自动探测（避免移动镜头）；Z7 II 100 步已实测"))
             }
             if let time = snapshot.exposureTime,
                let seconds = PTP.exposureSeconds(units: time),
@@ -544,7 +566,7 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
             }
             // MonitorOff works only in PC camera mode; do not probe it here.
             caps.insert(.monitorControl)
-            notes.append("关屏需切回 PC mode 设置")
+            notes.append(L10n.text("关屏需切回 PC mode 设置"))
 
             return CameraStatus(state: .connected,
                                 model: camera.deviceName ?? "Nikon",

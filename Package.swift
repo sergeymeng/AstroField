@@ -37,6 +37,7 @@ let librawTargets: [Target] = librawEnabled ? [
 
 let package = Package(
     name: "AstroField",
+    defaultLocalization: "zh-Hans",
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "afspike", targets: ["afspike"]),
@@ -68,6 +69,7 @@ let package = Package(
             name: "AstroFieldKit",
             dependencies: ["AFSpikeCore"] + librawDependencies,
             path: "Sources/AstroFieldKit",
+            resources: [.process("Resources")],
             swiftSettings: librawSettings
         ),
         .executableTarget(

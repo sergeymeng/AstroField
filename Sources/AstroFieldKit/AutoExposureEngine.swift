@@ -54,7 +54,7 @@ public enum AutoExposureStatus: Sendable, Equatable {
 
     public var displayText: String {
         switch self {
-        case .recommended: return "已确认"
+        case .recommended: return L10n.text("已确认")
         case .unconfirmed(let reason): return reason
         }
     }
@@ -186,16 +186,16 @@ public struct AutoExposureRunner: Sendable {
                 sample = try await probe(settings)
             } catch {
                 return AutoExposureResult(
-                    status: .unconfirmed("测量失败：\(error)"),
+                    status: .unconfirmed(L10n.text("测量失败：%@", error)),
                     settings: settings, samples: samples,
-                    message: "自动曝光中止：\(error)")
+                    message: L10n.text("自动曝光中止：%@", error))
             }
             samples.append(sample)
             await onStep(sample)
 
             let metrics = sample.metrics
             if isDecodeSuspect(metrics) {
-                let message = String(format: "解码异常：背景 %.0f，无法评估（Core Image RAW 限制）",
+                let message = String(format: L10n.text("解码异常：背景 %.0f，无法评估（Core Image RAW 限制）"),
                                      metrics.background)
                 return AutoExposureResult(status: .unconfirmed(message),
                                           settings: settings, samples: samples,
@@ -250,25 +250,25 @@ public struct AutoExposureRunner: Sendable {
             maxValue: final.maxValue)
         var problems: [String] = []
         if final.metrics.starCount < config.minStars {
-            problems.append("星点不足 \(final.metrics.starCount)（需 \(config.minStars)）")
+            problems.append(L10n.text("星点不足 %@（需 %@）", final.metrics.starCount, config.minStars))
         }
         if final.metrics.medianEccentricity > config.maxEccentricity {
-            problems.append(String(format: "偏心 %.2f（拖线）", final.metrics.medianEccentricity))
+            problems.append(String(format: L10n.text("偏心 %.2f（拖线）"), final.metrics.medianEccentricity))
         }
         if final.metrics.saturatedFraction > config.maxSaturatedFraction {
-            problems.append(String(format: "饱和 %.3f%%", final.metrics.saturatedFraction * 100))
+            problems.append(String(format: L10n.text("饱和 %.3f%%"), final.metrics.saturatedFraction * 100))
         }
         let lower = target * (1 - config.backgroundTolerance)
         let upper = target * (1 + config.backgroundTolerance)
         if final.metrics.background < lower || final.metrics.background > upper {
-            problems.append(String(format: "背景 %.0f（目标 %.0f）",
+            problems.append(String(format: L10n.text("背景 %.0f（目标 %.0f）"),
                                    final.metrics.background, target))
         }
 
         let status: AutoExposureStatus = problems.isEmpty
             ? .recommended
-            : .unconfirmed(problems.joined(separator: "，"))
-        let message = String(format: "ISO %d，%@，f/%.1f；背景 %.0f，星点 %d，偏心 %.2f",
+            : .unconfirmed(problems.joined(separator: L10n.text("，")))
+        let message = String(format: L10n.text("ISO %d，%@，f/%.1f；背景 %.0f，星点 %d，偏心 %.2f"),
                              final.settings.iso,
                              CapturePlan.formatDuration(final.settings.exposureSeconds),
                              final.settings.aperture ?? aperture,

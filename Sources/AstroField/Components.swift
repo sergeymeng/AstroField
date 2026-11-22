@@ -114,7 +114,7 @@ struct PanelSection<Content: View>: View {
                             .font(CinemaFont.micro(9.5))
                             .tracking(1.6)
                             .foregroundStyle(palette.textSecondary)
-                        if let subtitle {
+                        if let subtitle, subtitle.caseInsensitiveCompare(title) != .orderedSame {
                             Text(subtitle)
                                 .font(CinemaFont.tiny(9.5))
                                 .foregroundStyle(palette.textDim)
@@ -142,7 +142,7 @@ struct PanelSection<Content: View>: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .help("说明")
+                    .help(L10n.text("说明"))
                     .popover(isPresented: $showHelp, arrowEdge: .trailing) {
                         Text(help)
                             .font(CinemaFont.label(11))

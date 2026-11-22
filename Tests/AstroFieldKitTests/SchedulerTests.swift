@@ -10,8 +10,8 @@ final class SchedulerTests: XCTestCase {
         plan.exposureSeconds = 15
         plan.interval = .fixedStart(seconds: 20)
         plan.end = .count(3)
-        XCTAssertTrue(plan.summary.contains("10 秒后开始"))
-        XCTAssertTrue(plan.summary.contains("拍满 3 张"))
+        XCTAssertTrue(plan.summary.contains(L10n.text("%@后开始", CapturePlan.formatDuration(10))))
+        XCTAssertTrue(plan.summary.contains(L10n.text("拍满 %@ 张停止", 3)))
     }
 
     func testFixedStartTheory() {
@@ -26,7 +26,7 @@ final class SchedulerTests: XCTestCase {
         XCTAssertEqual(times, [10, 30, 50])
 
         // The exposure ends at 25/45/65; starts stay on the fixed grid.
-        XCTAssertTrue(plan.intervalText.contains("固定间隔"))
+        XCTAssertEqual(plan.intervalText, L10n.text("固定间隔 %@（按开始时刻）", CapturePlan.formatDuration(20)))
     }
 
     func testAfterExposureTheory() {
@@ -56,7 +56,7 @@ final class SchedulerTests: XCTestCase {
         plan.exposureSeconds = 15
         plan.interval = .fixedStart(seconds: 12)
         let issues = ScheduleCalculator.preflight(plan: plan)
-        XCTAssertTrue(issues.contains { $0.contains("固定间隔") })
+        XCTAssertTrue(issues.contains(String(format: L10n.text("固定间隔 %.0f 秒小于曝光 %.0f 秒 + 处理时间，时间点会顺延或跳过"), 12.0, 15.0)))
     }
 
     func testExposureRampInterpolation() {

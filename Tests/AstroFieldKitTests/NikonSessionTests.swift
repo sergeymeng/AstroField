@@ -19,7 +19,7 @@ final class NikonSessionTests: XCTestCase {
         XCTAssertFalse(camera.status.state.isConnected)
         XCTAssertTrue(camera.status.capabilities.contains(.liveView),
                       "capabilities are kept so the reconnect can reuse them")
-        XCTAssertTrue(camera.status.notes.first?.contains("ICC 会话断开") == true)
+        XCTAssertEqual(camera.status.notes.first, reasons.first.map { L10n.text("ICC 会话断开：%@", $0) })
     }
 
     func testIntentionalCloseIsSuppressed() async {

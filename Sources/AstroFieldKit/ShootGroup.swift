@@ -4,10 +4,18 @@ public enum ShootGroupKind: String, Codable, Equatable, Hashable, Sendable, Case
     case sky
     case foreground
 
-    public var displayName: String {
+    // Original group names are also keys in saved plans and frame records.
+    fileprivate var storedDefaultName: String {
         switch self {
         case .sky: return "天空"
         case .foreground: return "地景"
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .sky: return L10n.text("天空")
+        case .foreground: return L10n.text("地景")
         }
     }
 }
@@ -35,6 +43,10 @@ public struct ShootGroup: Identifiable, Codable, Equatable, Sendable {
         self.focusOffsetSteps = focusOffsetSteps
     }
 
+    public var displayName: String {
+        name == kind.storedDefaultName ? kind.displayName : name
+    }
+
     public static func defaults() -> [ShootGroup] {
         var sky = CapturePlan()
         sky.start = .immediate
@@ -55,8 +67,8 @@ public struct ShootGroup: Identifiable, Codable, Equatable, Sendable {
         foreground.compression = .raw
 
         return [
-            ShootGroup(name: "天空", kind: .sky, plan: sky),
-            ShootGroup(name: "地景", kind: .foreground, plan: foreground,
+            ShootGroup(name: ShootGroupKind.sky.storedDefaultName, kind: .sky, plan: sky),
+            ShootGroup(name: ShootGroupKind.foreground.storedDefaultName, kind: .foreground, plan: foreground,
                        focusOffsetSteps: 0)
         ]
     }

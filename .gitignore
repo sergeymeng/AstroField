@@ -36,6 +36,7 @@ xcuserdata/
 !/docs/screenshots/19-dark.png
 !/docs/screenshots/20-session.png
 !/docs/screenshots/23-findstar.png
+!/docs/screenshots/23-findstar-en.png
 
 # Local configuration and credentials
 .env

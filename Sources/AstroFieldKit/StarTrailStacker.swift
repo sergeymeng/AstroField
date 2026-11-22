@@ -49,7 +49,7 @@ public final class StarTrailStacker: @unchecked Sendable {
         let frame = image.downsampled(maxWidth: width)
         guard frame.width == width, frame.height == height else {
             rejected += 1
-            return snapshot(accepted: false, reason: "尺寸不一致")
+            return snapshot(accepted: false, reason: L10n.text("尺寸不一致"))
         }
         if let last = lastTimestamp {
             let gap = timestamp.timeIntervalSince(last)

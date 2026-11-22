@@ -24,11 +24,11 @@ final class ReconnectPolicyTests: XCTestCase {
         let reconnecting = CameraState.reconnecting(attempt: 2, maxAttempts: 5)
         XCTAssertFalse(reconnecting.isConnected)
         XCTAssertTrue(reconnecting.isReconnecting)
-        XCTAssertEqual(reconnecting.displayText, "重连中 2/5")
+        XCTAssertEqual(reconnecting.displayText, L10n.text("重连中 %@/%@", 2, 5))
 
         let recovered = CameraState.recovered
         XCTAssertTrue(recovered.isConnected)
         XCTAssertFalse(recovered.isReconnecting)
-        XCTAssertEqual(recovered.displayText, "已恢复")
+        XCTAssertEqual(recovered.displayText, L10n.text("已恢复"))
     }
 }

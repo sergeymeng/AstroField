@@ -13,8 +13,8 @@ public struct LiveViewStretchSettings: Codable, Equatable, Sendable {
     public var enabled: Bool
     /// White point, in background noise sigmas above the median.
     public var gainSigma: Double
-    /// Black point, in noise sigmas relative to the median. Negative pushes
-    /// the background below black; 0 puts the median exactly at black.
+    /// Black point relative to the median, in noise sigmas. Negative values
+    /// retain background detail below the median.
     public var blackSigma: Double
     /// Display gamma. 0.7 matches the simulator's star-field preview.
     public var gamma: Double

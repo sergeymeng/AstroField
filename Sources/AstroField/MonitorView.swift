@@ -66,14 +66,14 @@ struct MonitorView: View {
         let pair = Array(model.records.suffix(2))
         if pair.count == 2 {
             HStack(spacing: 1) {
-                compareCell(pair[0], label: "较早")
-                compareCell(pair[1], label: "较新")
+                compareCell(pair[0], label: L10n.text("较早"))
+                compareCell(pair[1], label: L10n.text("较新"))
             }
             .frame(width: size.width, height: size.height)
         } else if pair.last != nil {
             imageContent(size: size)
                 .overlay(alignment: .top) {
-                    Text("需要两张照片")
+                    Text(L10n.text("需要两张照片"))
                         .font(CinemaFont.tiny(10))
                         .foregroundStyle(palette.amber)
                         .padding(.horizontal, 7)
@@ -100,7 +100,7 @@ struct MonitorView: View {
                     .interpolation(.medium)
                     .aspectRatio(contentMode: .fit)
             } else {
-                Text("无预览")
+                Text(L10n.text("无预览"))
                     .font(CinemaFont.tiny(10))
                     .foregroundStyle(palette.textDim)
             }
@@ -130,7 +130,7 @@ struct MonitorView: View {
                     Image(systemName: "camera.aperture")
                         .font(.system(size: 30, weight: .thin))
                         .foregroundStyle(palette.textDim)
-                    Text(model.isConnecting ? "正在连接…" : "等待画面")
+                    Text(model.isConnecting ? L10n.text("正在连接…") : L10n.text("等待画面"))
                         .font(CinemaFont.label(12))
                         .foregroundStyle(palette.textSecondary)
                 }
@@ -299,13 +299,13 @@ struct MonitorView: View {
         case .stack:
             return stackStatsText
         case .compare:
-            return "两张对比"
+            return L10n.text("两张对比")
         case .last:
             if let record = model.selectedRecord {
                 let crop = model.analysisCrop == .full ? "" : "  \(model.analysisCrop.displayName)"
                 return "\(record.displayName)   \(sizeText)\(crop)"
             }
-            return "无照片"
+            return L10n.text("无照片")
         }
     }
 
@@ -391,17 +391,17 @@ struct MonitorView: View {
 
     private var stackStatsText: String {
         if model.stack.mode == .trails {
-            var parts = ["帧数 \(model.stack.accepted)",
-                         "累计 \(CapturePlan.formatDuration(model.stack.totalExposure))"]
+            var parts = [L10n.text("帧数 %@", model.stack.accepted),
+                         L10n.text("累计 %@", CapturePlan.formatDuration(model.stack.totalExposure))]
             if model.stack.gapCount > 0 {
-                parts.append("间断 \(model.stack.gapCount)")
+                parts.append(L10n.text("间断 %@", model.stack.gapCount))
             }
             return parts.joined(separator: "   ")
         }
-        var parts = ["参与 \(model.stack.accepted)", "拒绝 \(model.stack.rejected)",
-                     String(format: "覆盖 %.0f%%", model.stack.coverage * 100)]
+        var parts = [L10n.text("参与 %@", model.stack.accepted), L10n.text("拒绝 %@", model.stack.rejected),
+                     String(format: L10n.text("覆盖 %.0f%%"), model.stack.coverage * 100)]
         if model.stack.shiftText != "—" {
-            parts.append("位移 \(model.stack.shiftText)")
+            parts.append(L10n.text("位移 %@", model.stack.shiftText))
         }
         return parts.joined(separator: "   ")
     }
@@ -409,16 +409,16 @@ struct MonitorView: View {
     private func qualityLabel(_ record: ImageRecord) -> String {
         if let verdict = record.verdict {
             switch verdict {
-            case .accepted: return "正常"
+            case .accepted: return L10n.text("正常")
             case .warning(let text): return text
             case .rejected(let text): return text
             case .unmeasured(let text): return text
             }
         }
         if let metrics = record.metrics {
-            return String(format: "FWHM %.2f   %d 星", metrics.medianFWHM, metrics.starCount)
+            return String(format: L10n.text("FWHM %.2f   %d 星"), metrics.medianFWHM, metrics.starCount)
         }
-        return "分析中…"
+        return L10n.text("分析中…")
     }
 
     private func frameOverlay(size: CGSize) -> some View {
@@ -490,7 +490,7 @@ struct MonitorView: View {
                     cross.move(to: CGPoint(x: p.x, y: p.y + 9))
                     cross.addLine(to: CGPoint(x: p.x, y: p.y + 13))
                     context.stroke(cross, with: .color(palette.selected), lineWidth: 1.2)
-                    context.draw(Text("最亮").font(.system(size: 8))
+                    context.draw(Text(L10n.text("最亮")).font(.system(size: 8))
                                     .foregroundColor(palette.selected),
                                  at: CGPoint(x: p.x, y: p.y - 17))
                 }
@@ -555,12 +555,12 @@ struct MonitorView: View {
                 Text(model.status.state.displayText)
                     .font(CinemaFont.title(14))
                     .foregroundStyle(palette.text)
-                Text(model.status.notes.first ?? "ICC 会话断开")
+                Text(model.status.notes.first ?? L10n.text("ICC 会话断开"))
                     .font(CinemaFont.tiny(9.5))
                     .foregroundStyle(palette.textDim)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
-                Text("恢复后自动继续取景")
+                Text(L10n.text("恢复后自动继续取景"))
                     .font(CinemaFont.tiny(9))
                     .foregroundStyle(palette.textDim)
             }
@@ -575,20 +575,20 @@ struct MonitorView: View {
                 Image(systemName: "bolt.horizontal.circle")
                     .font(.system(size: 28, weight: .thin))
                     .foregroundStyle(palette.textDim)
-                Text(model.isConnecting ? "正在连接…" : "未连接")
+                Text(model.isConnecting ? L10n.text("正在连接…") : L10n.text("未连接"))
                     .font(CinemaFont.title(14))
                     .foregroundStyle(palette.text)
-                Text(model.status.notes.first ?? "选择来源")
+                Text(model.status.notes.first ?? L10n.text("选择来源"))
                     .font(CinemaFont.tiny(9.5))
                     .foregroundStyle(palette.textDim)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
                 HStack(spacing: 8) {
-                    Button("模拟相机") { Task { await model.connect(.simulator) } }
+                    Button(L10n.text("模拟相机")) { Task { await model.connect(.simulator) } }
                         .buttonStyle(CinemaButtonStyle(prominent: true, compact: true))
                     Button("Nikon USB") { Task { await model.connect(.nikon) } }
                         .buttonStyle(CinemaButtonStyle(compact: true))
-                    Button("照片回放…") { model.choosePlaybackDirectory() }
+                    Button(L10n.text("照片回放…")) { model.choosePlaybackDirectory() }
                         .buttonStyle(CinemaButtonStyle(compact: true))
                 }
             }

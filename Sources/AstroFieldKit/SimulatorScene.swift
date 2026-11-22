@@ -11,12 +11,12 @@ public enum SkyCondition: String, Codable, CaseIterable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .clear: return "晴空"
-        case .fewStars: return "少星"
-        case .overcast: return "薄云"
-        case .brightSky: return "亮背景"
-        case .noStars: return "无星"
-        case .obstruction: return "前景遮挡"
+        case .clear: return L10n.text("晴空")
+        case .fewStars: return L10n.text("少星")
+        case .overcast: return L10n.text("薄云")
+        case .brightSky: return L10n.text("亮背景")
+        case .noStars: return L10n.text("无星")
+        case .obstruction: return L10n.text("前景遮挡")
         }
     }
 }

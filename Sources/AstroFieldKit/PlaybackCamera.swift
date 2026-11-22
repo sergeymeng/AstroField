@@ -8,7 +8,7 @@ import AFSpikeCore
 public final class PlaybackCamera: CameraDevice, @unchecked Sendable {
     public let id = UUID()
     public var kind: CameraKind { .playback }
-    public var displayName: String { "照片回放" }
+    public var displayName: String { L10n.text("照片回放") }
 
     private let lock = NSLock()
     private var statusStorage: CameraStatus
@@ -43,7 +43,7 @@ public final class PlaybackCamera: CameraDevice, @unchecked Sendable {
         self.statusStorage = CameraStatus(state: .disconnected,
                                           model: "Playback",
                                           capabilities: caps,
-                                          notes: ["回放模式：文件原样呈现，参数修改不会改变照片"])
+                                          notes: [L10n.text("回放模式：文件原样呈现，参数修改不会改变照片")])
     }
 
     deinit {
@@ -66,7 +66,7 @@ public final class PlaybackCamera: CameraDevice, @unchecked Sendable {
     public func disconnect() async {
         setStatus(CameraStatus(state: .disconnected, model: "Playback",
                                capabilities: Self.capabilities(for: files),
-                               notes: ["回放已停止"]))
+                               notes: [L10n.text("回放已停止")]))
     }
 
     public func apply(_ settings: ExposureSettings) async throws {
@@ -79,7 +79,7 @@ public final class PlaybackCamera: CameraDevice, @unchecked Sendable {
 
     public func capture(sequence: Int) async throws -> ImageRecord {
         guard status.state.isConnected else { throw CameraError.disconnected }
-        guard !files.isEmpty else { throw CameraError.captureFailed("所选目录里没有可回放的照片") }
+        guard !files.isEmpty else { throw CameraError.captureFailed(L10n.text("所选目录里没有可回放的照片")) }
         lock.lock()
         let url = files[index % files.count]
         index += 1
@@ -91,14 +91,14 @@ public final class PlaybackCamera: CameraDevice, @unchecked Sendable {
         let size = Self.imageSize(url: url)
         let ext = url.pathExtension.lowercased()
         var effective = settings
-        var note = "回放文件 \(url.lastPathComponent)"
+        var note = L10n.text("回放文件 %@", url.lastPathComponent)
         if let meta {
             if let iso = meta.iso { effective.iso = iso }
             if let exposure = meta.exposureSeconds { effective.exposureSeconds = exposure }
             if let aperture = meta.aperture { effective.aperture = aperture }
-            note += "（参数来自文件元数据；不随计划改变）"
+            note += L10n.text("（参数来自文件元数据；不随计划改变）")
         } else {
-            note += "（文件无元数据，参数仅记录，不改变文件）"
+            note += L10n.text("（文件无元数据，参数仅记录，不改变文件）")
         }
         return ImageRecord(sequence: sequence,
                            source: .playback,
@@ -113,7 +113,7 @@ public final class PlaybackCamera: CameraDevice, @unchecked Sendable {
     }
 
     public func startLiveView() async throws {
-        throw CameraError.unsupported("回放模式没有 LiveView")
+        throw CameraError.unsupported(L10n.text("回放模式没有 LiveView"))
     }
 
     public func stopLiveView() async {}
@@ -123,7 +123,7 @@ public final class PlaybackCamera: CameraDevice, @unchecked Sendable {
     }
 
     public func focusDrive(direction: FocusDirection, steps: Int) async throws {
-        throw CameraError.unsupported("回放模式不能驱动镜头")
+        throw CameraError.unsupported(L10n.text("回放模式不能驱动镜头"))
     }
 
     // MARK: - Files
@@ -137,7 +137,7 @@ public final class PlaybackCamera: CameraDevice, @unchecked Sendable {
         if !loaded.isEmpty {
             setStatus(CameraStatus(state: status.state, model: "Playback",
                                    capabilities: Self.capabilities(for: loaded),
-                                   notes: ["回放目录：\(directory.path)"]))
+                                   notes: [L10n.text("回放目录：%@", directory.path)]))
         }
     }
 
@@ -152,7 +152,7 @@ public final class PlaybackCamera: CameraDevice, @unchecked Sendable {
     }
 
     private var playbackNotes: [String] {
-        ["回放模式：\(files.count) 个文件", "参数修改只记录在计划中，不改变照片内容"]
+        [L10n.text("回放模式：%@ 个文件", files.count), L10n.text("参数修改只记录在计划中，不改变照片内容")]
     }
 
     private static func capabilities(for files: [URL]) -> Set<CameraCapability> {
