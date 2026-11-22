@@ -4,8 +4,7 @@ import ImageIO
 import UniformTypeIdentifiers
 import AFSpikeCore
 
-/// Playback source: delivers real files (or generated samples) through the same
-/// camera interface. It never claims that parameter changes alter the images.
+/// Replays files or generated samples with their original exposure and focus.
 public final class PlaybackCamera: CameraDevice, @unchecked Sendable {
     public let id = UUID()
     public var kind: CameraKind { .playback }
@@ -80,7 +79,7 @@ public final class PlaybackCamera: CameraDevice, @unchecked Sendable {
 
     public func capture(sequence: Int) async throws -> ImageRecord {
         guard status.state.isConnected else { throw CameraError.disconnected }
-        guard !files.isEmpty else { throw CameraError.captureFailed("回放目录为空") }
+        guard !files.isEmpty else { throw CameraError.captureFailed("所选目录里没有可回放的照片") }
         lock.lock()
         let url = files[index % files.count]
         index += 1

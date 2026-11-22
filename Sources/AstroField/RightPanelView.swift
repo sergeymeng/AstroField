@@ -45,7 +45,7 @@ private struct AutoPanel: View {
     var body: some View {
         PanelSection(title: "AUTO",
                      subtitle: model.autoExposure.isRunning ? "搜索中" : "星空自动曝光",
-                     help: "按 NPF 规则估拖线上限，闭环试拍把背景调到满量程约 12%。只在背景、星点、拖线、饱和全部达标时写回计划。焦距留空时从第一张试拍的 EXIF 读取。",
+                     help: "按焦距估算能拍多久才会拖线，再试拍调整天空亮度。焦距留空时会读取第一张照片的 EXIF。",
                      expandedByDefault: true) {
             HStack(spacing: 8) {
                 TextField("焦距 mm（留空读 EXIF）", text: $focalText)
@@ -119,7 +119,7 @@ private struct PlanPanel: View {
     var body: some View {
         PanelSection(title: "PLAN",
                          subtitle: model.isRunning ? "运行中" : "拍摄计划",
-                         help: "开始前会检查曝光与处理时间能否排进节奏；固定间隔被打断时按所选策略顺延或跳过。") {
+                         help: "固定开拍间隔会把曝光时间算在内。上一张还没拍完时，可以让后面的照片顺延，也可以跳过这一张。") {
             Text(model.plan.summary)
                 .font(CinemaFont.tiny(10))
                 .foregroundStyle(palette.textDim.opacity(0.95))
@@ -290,7 +290,7 @@ private struct GroupsPanel: View {
     var body: some View {
         PanelSection(title: "GROUPS",
                      subtitle: model.groupRunning ? (model.activeGroupName ?? "运行中") : "分组拍摄",
-                     help: "按顺序拍摄启用的分组。每组有自己的计划，可设置相对对焦偏移；全部结束后会回到起始焦点。方向 1/2 的物理含义随机身与镜头变化。") {
+                     help: "勾选要拍的分组。每组可以单独设置曝光和对焦偏移，最后一组拍完后镜头会按相反步数回调。") {
             ForEach(model.groups) { group in
                 let index = model.groups.firstIndex(where: { $0.id == group.id }) ?? 0
                 let active = model.activeGroupIndex == index
@@ -371,7 +371,7 @@ private struct FocusPanel: View {
     var body: some View {
         PanelSection(title: "FOCUS",
                          subtitle: model.focus.isRunning ? "搜索中" : "对焦",
-                         help: "MFDrive 没有绝对位置，方向 1/2 的物理含义随机身与镜头组合变化。搜索结果需要复拍验证；证据不足时显示尚未确认。") {
+                         help: "搜索时镜头会向两个方向移动。拍完验证帧后，比较星点的 FWHM，数值越小，星点越紧。方向 1 和 2 随镜头而异。") {
             HStack(spacing: 6) {
                 Button(model.focus.isRunning ? "搜索中…" : "自动对焦") {
                     model.runAutoFocus()
@@ -458,7 +458,7 @@ private struct ViewfinderPanel: View {
     var body: some View {
         PanelSection(title: "VIEWFINDER",
                      subtitle: model.findStarMode ? "找星" : (model.liveAssistEnabled ? "取景辅助" : "取景"),
-                     help: "中心放大、星点标记和实时指标只作用于 LiveView，不改变照片或测量输入。拉伸只生成显示图，分析和对焦使用原始帧。找星模式临时把 ISO 提到 12800，退出时恢复原拍摄设置。") {
+                     help: "调增益和黑场可以看清暗星，对焦用原始帧。找星时 ISO 暂时升到 12800，退出后恢复。") {
             HStack(spacing: 8) {
                 Button(model.findStarMode ? "退出找星" : "找星模式") {
                     model.toggleFindStarMode()
@@ -586,7 +586,7 @@ private struct DarkPanel: View {
     var body: some View {
         PanelSection(title: "DARK",
                      subtitle: model.darkCollecting ? "采集中" : (model.darkEnabled ? "已启用" : "暗场校准"),
-                     help: "镜头盖暗场：按当前 ISO 与曝光采集多帧，均值合成 master dark。拍摄时按 ISO、曝光、来源与尺寸自动匹配；减除只影响测量分析与叠加，不修改文件。",
+                     help: "盖上镜头盖，用拍星时的 ISO 和曝光时间采集几张暗场。应用取平均后，用它校正分析图和叠加图。",
                      expandedByDefault: true) {
             Toggle("拍摄时减暗场", isOn: Binding(
                 get: { model.darkEnabled },
@@ -661,7 +661,7 @@ private struct SessionPanel: View {
     var body: some View {
         PanelSection(title: "SESSION",
                      subtitle: model.sessionInfo == nil ? "会话" : "\(model.sessionFrameCount) 帧",
-                     help: "每次开始序列或分组会建立带时间戳的会话目录。模拟帧写成 16-bit TIFF；真实 NEF 不复制、不改原文件，只写 sidecar。叠加成片与 CSV/JSON 报告导出到会话目录。",
+                     help: "每组拍摄都有自己的目录，里面有逐张记录、叠加图和导出的报告。实拍 NEF 保存在下载位置。",
                      expandedByDefault: true) {
             if let info = model.sessionInfo {
                 Text(info.name)
@@ -741,7 +741,7 @@ private struct AnalysisPanel: View {
     var body: some View {
         PanelSection(title: "ANALYSIS",
                          subtitle: model.selectedRecord?.displayName ?? "分析",
-                         help: "测量输入是解码后的线性亮度；显示拉伸和直方图只影响显示，不改变测量值。") {
+                         help: "放大中心或四角检查星形。星点大小和背景亮度取自原始解码帧。") {
             Picker("", selection: $model.analysisCrop) {
                 ForEach(AnalysisCropMode.allCases) { mode in
                     Text(mode.displayName).tag(mode)
@@ -839,7 +839,7 @@ private struct StackPanel: View {
     var body: some View {
         PanelSection(title: "STACK",
                          subtitle: model.stack.enabled ? "开启" : "现场叠加",
-                         help: "按星点平移对齐后做平均累积。旋转、视差和移动地景不在当前处理范围内。",
+                         help: "用星点对齐各张照片，再取平均。对齐仅校正水平和垂直位移。",
                          expandedByDefault: false) {
             Toggle("累积新到照片", isOn: Binding(
                 get: { model.stack.enabled },
@@ -898,7 +898,7 @@ private struct QualityPanel: View {
     var body: some View {
         PanelSection(title: "QUALITY",
                          subtitle: model.quality.lastAction.isEmpty ? "质量规则" : "有提醒",
-                         help: "背景变化和星数不足只作为提醒，不作为失焦证据；自动重对焦有次数上限。",
+                         help: "星数减少或天空变亮时会提醒。星点连续变大时，可以让序列暂停或重新对焦。",
                          expandedByDefault: false) {
             Toggle("清晰度异常时暂停等待复核", isOn: $model.quality.autoPause)
                 .toggleStyle(.checkbox)
@@ -930,7 +930,7 @@ private struct TrialPanel: View {
     var body: some View {
         PanelSection(title: "TRIALS",
                          subtitle: model.isTrialRunning ? "拍摄中" : "参数试拍",
-                         help: "候选按本次构图与约束比较。镜头档案记录当次条件，历史焦点不作为下一次结果。",
+                         help: "比较同一构图下的试拍，把选中的参数写回计划，也可以连同拍摄条件存入镜头档案。",
                          expandedByDefault: false) {
             HStack(spacing: 6) {
                 Button("快门试拍") { model.runShutterTrial() }
@@ -1021,7 +1021,7 @@ private struct SimulatorPanel: View {
         if model.sourceKind == .simulator {
             PanelSection(title: "SIMULATOR",
                          subtitle: "仿真",
-                         help: "模拟相机支持曝光、对焦、噪声、移动和故障注入；所有读数均为仿真值。",
+                         help: "试试薄云、焦点偏移或慢下载，看看拍摄中的画面和计数怎样变化。",
                          expandedByDefault: false) {
                 Menu("场景：\(model.simulatorCondition.displayName)") {
                     ForEach(SkyCondition.allCases, id: \.rawValue) { condition in

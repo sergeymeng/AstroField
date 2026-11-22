@@ -2565,7 +2565,7 @@ final class AppModel: ObservableObject {
                                              saved.frameCount)
                     self.appendLog("暗场分布异常，未启用：Core Image 解码的 NEF 暗场不可靠",
                                    level: .warning)
-                    self.showToast("暗场已保存但分布异常，未启用", kind: .warning)
+                    self.showToast("暗场已保存。像素分布异常，已跳过这组暗场", kind: .warning)
                 }
                 self.resetQualityAfterDarkChange()
             } catch {
@@ -2750,7 +2750,7 @@ final class AppModel: ObservableObject {
             image = stacker?.currentMean()
         }
         guard let image else {
-            showToast("没有可导出的叠加", kind: .warning)
+            showToast("还没有可导出的叠加图", kind: .warning)
             return
         }
         let name = stack.mode == .trails ? "stack-trails" : "stack-mean"
@@ -2808,7 +2808,7 @@ final class AppModel: ObservableObject {
             let frames = store.frames(in: directory).filter { $0.role == .light }
             guard frames.count >= 2 else {
                 await MainActor.run {
-                    self?.finishStack(error: "会话中的 light 帧不足（\(frames.count)）")
+                    self?.finishStack(error: "会话里的亮场帧太少（\(frames.count)）")
                 }
                 return
             }
@@ -2890,7 +2890,7 @@ final class AppModel: ObservableObject {
     func savePreset() {
         let name = presetName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            showToast("预设名不能为空", kind: .warning)
+            showToast("先给预设起个名字", kind: .warning)
             return
         }
         presets = presetStore.upsert(name: name, plan: plan)

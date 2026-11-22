@@ -425,7 +425,7 @@ public final class NikonCamera: CameraDevice, @unchecked Sendable {
         }
         guard let image = ImageLoader.preview(url: url, maxWidth: 2200),
               let luma = ImageLoader.luma(url: url, maxWidth: 2200) else {
-            throw CameraError.io("找星测试帧解码失败")
+            throw CameraError.io("无法读取找星试拍的 JPEG")
         }
         return FinderFrame(image: image, luma: luma)
     }

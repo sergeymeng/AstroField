@@ -5,8 +5,7 @@ import ImageIO
 
 /// Loads previews and measurement luminance from NEF/JPEG/TIFF files.
 ///
-/// NEF goes through Core Image's RAW pipeline. The result is decoded, demosaiced
-/// luminance — useful for star measurement, never presented as sensor-native data.
+/// Star measurements use decoded luminance from Core Image or LibRaw.
 public enum ImageLoader {
     private static let context = CIContext(options: [.cacheIntermediates: false])
 

@@ -1,10 +1,7 @@
 import Foundation
 import CoreGraphics
 
-/// Linear-ish luminance image used for measurement.
-///
-/// This is decoded luminance, not sensor-native data. Display stretch and white
-/// balance never modify these values.
+/// Decoded luminance for measurement, before any viewfinder stretch.
 public struct LumaImage: Sendable {
     public var width: Int
     public var height: Int

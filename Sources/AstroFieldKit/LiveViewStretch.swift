@@ -6,8 +6,7 @@ import CoreGraphics
 /// The input is the decoded camera JPEG or a linear 8-bit render of the
 /// simulator frame. The output exists only for the monitor: median background
 /// is mapped to black, white sits at `gainSigma` noise sigmas above the median,
-/// and the result is gamma encoded. Measurement code keeps using the original
-/// frame bytes and never sees these pixels.
+/// and the result is gamma encoded. Focus uses the original frame.
 public struct LiveViewStretchSettings: Codable, Equatable, Sendable {
     /// When false the backend returns no display image and the raw frame is
     /// shown unchanged.

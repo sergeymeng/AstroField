@@ -97,17 +97,13 @@ public struct FrameSidecar: Codable, Equatable, Sendable, Identifiable {
     public var sessionID: UUID
     /// 会话内序号，仅用于显示与排序。
     public var sequence: Int
-    /// 拍摄时间。
     public var timestamp: Date
-    /// 拍摄角色。
     public var role: SessionRole
-    /// 帧来源设备。
     public var source: ImageSource
     /// 会话目录内的图像文件名（仅模拟帧写出 TIFF 时有值）。
     public var fileName: String?
     /// 相机原始文件路径（真实 NEF/JPEG 回放时记录，不复制）。
     public var originalPath: String?
-    /// 拍摄参数快照。
     public var settings: SettingsSnapshot
     /// 图像宽度（写 TIFF 帧时由像素数据覆盖）。
     public var width: Int
@@ -117,9 +113,7 @@ public struct FrameSidecar: Codable, Equatable, Sendable, Identifiable {
     public var metrics: MetricsSnapshot?
     /// 质量判定快照，未判定时为 nil。
     public var verdict: VerdictSnapshot?
-    /// 所属分组名称。
     public var qualityGroup: String?
-    /// 备注。
     public var note: String?
     /// 是否已应用暗场校正。
     public var darkApplied: Bool
@@ -158,9 +152,7 @@ public struct SessionInfo: Codable, Equatable, Sendable, Identifiable {
     public var id: UUID
     /// 会话目录名（本地时区 `yyyy-MM-dd_HHmmss`，重名时带 `-2` 后缀）。
     public var name: String
-    /// 会话目录绝对路径。
     public var directory: URL
-    /// 会话开始时间。
     public var startedAt: Date
 
     public init(id: UUID = UUID(), name: String, directory: URL,
@@ -288,15 +280,13 @@ public enum SessionReport {
     }
 }
 
-/// `SessionStore` 的落盘错误。所有写操作失败都会抛出，不静默吞掉。
+/// 创建会话和保存文件时可能出现的错误。
 public enum SessionStoreError: Error, LocalizedError, Equatable {
     /// 尚未调用 `beginSession`。
     case noActiveSession
     /// sidecar 属于其他会话，拒绝写入当前会话目录。
     case sessionMismatch
-    /// 会话目录创建失败。
     case directoryCreationFailed(URL, String)
-    /// 文件写入失败。
     case writeFailed(URL, String)
 
     public var errorDescription: String? {
@@ -308,7 +298,7 @@ public enum SessionStoreError: Error, LocalizedError, Equatable {
         case .directoryCreationFailed(let url, let reason):
             return "无法创建会话目录 \(url.path)：\(reason)"
         case .writeFailed(let url, let reason):
-            return "写入失败 \(url.lastPathComponent)：\(reason)"
+            return "无法保存 \(url.lastPathComponent)：\(reason)"
         }
     }
 }

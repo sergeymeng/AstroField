@@ -167,9 +167,8 @@ public enum CameraError: Error, CustomStringConvertible, Equatable {
 /// One live-view preview frame. `isSimulated` must be true for any synthetic source.
 ///
 /// `image` is the measurement frame. For Nikon it is the decoded camera JPEG,
-/// exactly what focus and LiveView analysis consume. `displayImage`, when
-/// present, is a display-only stretched frame and must never be passed to
-/// measurement code.
+/// used by focus and star detection. The monitor prefers `displayImage`
+/// when a stretched preview is available.
 public struct LivePreview: @unchecked Sendable {
     public var sequence: UInt64
     public var image: CGImage
