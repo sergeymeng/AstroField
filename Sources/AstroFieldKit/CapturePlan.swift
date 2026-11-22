@@ -84,6 +84,9 @@ public struct CapturePlan: Codable, Equatable, Sendable {
     public var aperture: Double?
     public var compression: CompressionChoice
     public var ramp: ExposureRamp?
+    /// Lens focal length in millimetres, used by the star-field auto exposure
+    /// helper. Read from a trial frame's EXIF when nil.
+    public var focalLengthMM: Double?
 
     public init(start: StartMode = .delay(seconds: 5),
                 exposureSeconds: Double = 10,
@@ -93,7 +96,8 @@ public struct CapturePlan: Codable, Equatable, Sendable {
                 iso: Int = 1600,
                 aperture: Double? = 2.8,
                 compression: CompressionChoice = .raw,
-                ramp: ExposureRamp? = nil) {
+                ramp: ExposureRamp? = nil,
+                focalLengthMM: Double? = nil) {
         self.start = start
         self.exposureSeconds = exposureSeconds
         self.interval = interval
@@ -103,6 +107,7 @@ public struct CapturePlan: Codable, Equatable, Sendable {
         self.aperture = aperture
         self.compression = compression
         self.ramp = ramp
+        self.focalLengthMM = focalLengthMM
     }
 
     public var settings: ExposureSettings {

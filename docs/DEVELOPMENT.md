@@ -2,7 +2,7 @@
 
 ## 构建与测试
 
-应用和 CLI 都是 Swift Package Manager 目标。默认构建只使用 macOS 系统框架，不需要 Nikon SDK。
+应用和 CLI 都是 Swift Package Manager 目标。基础构建使用 macOS 系统框架。构建时若检测到 LibRaw，还会启用线性 RAW 解码。
 
 ```bash
 swift build
@@ -44,19 +44,27 @@ ASTROFIELD_PLAYBACK_DIR="/path/to/photos" swift run AstroField
 
 | 变量 | 用途 |
 |---|---|
-| `ASTROFIELD_DEMO` | `idle`、`exposing`、`waiting`、`focus`、`stack`、`analysis`、`corners`、`trial`、`compare`、`groups`、`trails` 等演示状态 |
+| `ASTROFIELD_DEMO` | `idle`、`exposing`、`waiting`、`focus`、`stack`、`analysis`、`corners`、`trial`、`compare`、`groups`、`trails`、`dark`、`fullchain`、`auto`、`autostack`、`findstar`、`findstarblack`、`findstarfocus` 等演示状态 |
 | `ASTROFIELD_NIGHT=1` | 使用夜间主题 |
 | `ASTROFIELD_WINDOW_SIZE` | 设置窗口大小，例如 `1180x760` |
 | `ASTROFIELD_SHOT_PATH` | 将实际应用窗口保存为截图 |
 | `ASTROFIELD_SHOT_DELAY` | 截图前等待的秒数 |
 | `ASTROFIELD_SHOT_EXIT=1` | 保存截图后退出 |
+| `ASTROFIELD_SESSION_ROOT` | 覆盖会话根目录（默认 `~/Pictures/AstroField`） |
+| `ASTROFIELD_DARK_DIR` | 覆盖暗场库目录（默认 `~/Library/Application Support/AstroField/Darks`） |
+
+`dark` 演示采集 2 帧暗场后试拍一张；`fullchain` 依次执行暗场采集、天空/地景分组、
+自动对焦、叠加与报告导出；`auto` 在模拟器上跑星空自动曝光的闭环搜索；`autostack`
+拍 3 张后自动对星叠加并导出 `auto-stack.tif/png`。`findstar` 进入找星模式并显示星点/
+最亮星标记；`findstarblack` 用无星场景验证测试帧回退；`findstarfocus` 再执行一次单星
+MFDrive 对焦。截图脚本会把演示会话与暗场库写到 `logs/demo-session` 与 `logs/demo-darks`。
 
 ```bash
 swift build
 ./scripts/screenshot.sh
 ```
 
-截图脚本需要可用的 macOS 图形会话。仓库中的图片来自模拟星空；其余检查图片和实拍素材保留在本机。
+截图脚本需要可用的 macOS 图形会话。仓库中的图片来自模拟星空。
 
 ## ImageCaptureCore 诊断
 
@@ -68,6 +76,35 @@ swift build
 ```
 
 不带参数运行 `swift run afspike` 可以查看完整命令列表。涉及曝光、相机模式和镜头移动的命令会操作真实设备，按具体测试需要执行。
+
+App 内 ICC 会话诊断：
+
+- 底部日志会记录 `ICC 会话断开：...`，原因来自 `ICCCameraDelegate`：`session closed`、
+  `session closed with error: ...` 或 `device removed`。
+- 显示/系统休眠与唤醒会写入日志，用于和断开时间对照。
+- VIEWFINDER 的「保持后台活跃」阻止 App Nap；不阻止系统休眠。
+
+## 可选的 LibRaw 线性解码
+
+默认构建不依赖 LibRaw。安装了 Homebrew 的 LibRaw 后，`Package.swift` 会自动检测并编译
+`Sources/CLibRaw`，`AstroFieldKit` 获得 `ASTROFIELD_LIBRAW` 定义：
+
+```bash
+brew install libraw
+swift build
+```
+
+自定义安装位置：
+
+```bash
+export LIBRAW_PREFIX="/path/to/libraw"
+swift build
+```
+
+没有找到头文件时会自动回退 Core Image 解码，应用仍可构建和运行。LibRaw 路径使用
+half-size 解码、gamma 1、关闭相机矩阵和单位白平衡；输出亮度满量程是传感器白电平
+（Z7 II 为 15311），Auto 的目标背景据此计算。LibRaw 为 LGPL/CDDL，分发前需处理
+动态链接与许可。
 
 ## 可选的 Nikon MAID 后端
 
@@ -93,8 +130,8 @@ swift build
 
 没有启用 SDK 时，`afspike` 的 MAID 命令会报告缺少可选后端；模拟分析和 `icc*` 命令仍可使用。
 
-## 验证范围
+## 测试与硬件记录
 
-单元测试覆盖调度、模拟星场、对焦搜索、质量规则、预设和图像处理。它们不代表真实机身、镜头或夜空环境已经通过验收。
+单元测试覆盖调度、模拟星场、对焦搜索、显示拉伸、会话关闭回调与重试间隔。真机操作步骤和实测结果见 [Z7 II 验收记录](Z7II_APP_ACCEPTANCE.md)。
 
-硬件问题请记录机身、固件、镜头、所执行操作和错误文本。原始 NEF 与设备日志保存在本地；分享前按需要选择相关材料。
+报告硬件问题时，请附上机身型号、固件版本、镜头、复现步骤及对应时间的错误日志。

@@ -26,12 +26,18 @@ struct MonitorView: View {
                 if model.showStarMarkers, model.monitorMode != .live, model.monitorMode != .compare {
                     starOverlay(size: geo.size)
                 }
+                if model.liveAssistEnabled || model.findStarMode,
+                   model.monitorMode == .live, !model.liveStars.isEmpty {
+                    liveStarOverlay(size: geo.size)
+                }
 
                 if model.status.state.isConnected || model.isConnecting {
                     overlayChrome(size: geo.size)
                 }
 
-                if !model.status.state.isConnected {
+                if model.status.state.isReconnecting {
+                    reconnectOverlay(size: geo.size)
+                } else if !model.status.state.isConnected {
                     disconnectedOverlay(size: geo.size)
                 }
             }
@@ -206,7 +212,13 @@ struct MonitorView: View {
     private var topLeftInfo: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
-                if model.monitorMode == .live, model.liveImage != nil {
+                if model.monitorMode == .live, model.status.state.isReconnecting {
+                    Circle().fill(palette.amber).frame(width: 5, height: 5)
+                    Text("RECONNECT")
+                        .font(CinemaFont.micro(8.5))
+                        .tracking(1.6)
+                        .foregroundStyle(palette.amber)
+                } else if model.monitorMode == .live, model.liveImage != nil {
                     let liveColor = model.liveFrozen ? palette.amber : palette.red
                     Circle().fill(liveColor).frame(width: 5, height: 5)
                     Text(model.liveFrozen ? "LIVE HOLD" : "LIVE")
@@ -224,17 +236,37 @@ struct MonitorView: View {
                         .tracking(1.6)
                         .foregroundStyle(palette.textSecondary)
                 }
+                if model.findStarMode {
+                    Text(model.finderTestFrameShown ? "FIND TEST" : "FIND")
+                        .font(CinemaFont.micro(8.5))
+                        .tracking(1.4)
+                        .foregroundStyle(palette.amber)
+                }
                 Text(sourceCode)
                     .font(CinemaFont.micro(8.5))
                     .tracking(1.4)
                     .foregroundStyle(model.sourceKind == .simulator ? palette.amber : palette.textDim)
             }
 
-            Text(secondaryLine)
-                .font(CinemaFont.tiny(9))
-                .foregroundStyle(palette.textDim)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            HStack(spacing: 6) {
+                Text(secondaryLine)
+                    .font(CinemaFont.tiny(9))
+                    .foregroundStyle(palette.textDim)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if model.monitorMode == .live, model.liveZoom.rawValue > 1 {
+                    Text("ZOOM \(model.liveZoom.rawValue)×")
+                        .font(CinemaFont.micro(8))
+                        .tracking(1.2)
+                        .foregroundStyle(palette.amber)
+                }
+                if model.liveAssistEnabled, let fwhm = model.liveFWHM {
+                    Text(String(format: "FWHM %.2f", fwhm))
+                        .font(CinemaFont.micro(8.5))
+                        .monospacedDigit()
+                        .foregroundStyle(palette.textSecondary)
+                }
+            }
 
             if model.monitorMode == .live, model.liveSequence > 0 {
                 Text(String(format: "F %06llu", model.liveSequence))
@@ -281,8 +313,9 @@ struct MonitorView: View {
         let settings = model.monitorMode == .last
             ? (model.selectedRecord?.settings ?? model.plan.settings)
             : model.plan.settings
+        let iso = model.findStarMode ? 12800 : settings.iso
         return HStack(spacing: 0) {
-            statColumn("ISO", "\(settings.iso)")
+            statColumn("ISO", "\(iso)", color: model.findStarMode ? palette.amber : nil)
             statSeparator
             statColumn("SHUTTER", CapturePlan.formatDuration(settings.exposureSeconds))
             statSeparator
@@ -294,7 +327,7 @@ struct MonitorView: View {
         }
     }
 
-    private func statColumn(_ label: String, _ value: String) -> some View {
+    private func statColumn(_ label: String, _ value: String, color: Color? = nil) -> some View {
         VStack(alignment: .trailing, spacing: 2) {
             Text(label)
                 .font(CinemaFont.micro(7.5))
@@ -302,7 +335,7 @@ struct MonitorView: View {
                 .foregroundStyle(palette.textDim)
             Text(value)
                 .font(CinemaFont.smallValue(13))
-                .foregroundStyle(palette.text)
+                .foregroundStyle(color ?? palette.text)
                 .monospacedDigit()
         }
         .frame(minWidth: 48, alignment: .trailing)
@@ -414,6 +447,58 @@ struct MonitorView: View {
         .allowsHitTesting(false)
     }
 
+    private func liveStarOverlay(size: CGSize) -> some View {
+        let rect = imageRect(in: size)
+        let zoom = CGFloat(model.liveZoom.rawValue)
+        let origin = (1 - 1 / zoom) / 2
+        let span = 1 / zoom
+        return Canvas { context, _ in
+            func point(_ star: DetectedStar) -> CGPoint {
+                let nx = (CGFloat(star.x) - origin) / span
+                let ny = (CGFloat(star.y) - origin) / span
+                return CGPoint(x: rect.minX + nx * rect.width,
+                               y: rect.minY + ny * rect.height)
+            }
+            for star in model.liveStars.prefix(40) {
+                let nx = (CGFloat(star.x) - origin) / span
+                let ny = (CGFloat(star.y) - origin) / span
+                guard nx >= 0, nx <= 1, ny >= 0, ny <= 1 else { continue }
+                let p = point(star)
+                let radius: CGFloat = star.saturated ? 5 : 3.4
+                let circle = Path(ellipseIn: CGRect(x: p.x - radius, y: p.y - radius,
+                                                    width: radius * 2, height: radius * 2))
+                context.stroke(circle,
+                               with: .color(star.saturated ? palette.red.opacity(0.8)
+                                                           : palette.amber.opacity(0.8)),
+                               lineWidth: 0.8)
+            }
+            if model.findStarMode, let brightest = model.liveBrightestStar {
+                let nx = (CGFloat(brightest.x) - origin) / span
+                let ny = (CGFloat(brightest.y) - origin) / span
+                if nx >= -0.1, nx <= 1.1, ny >= -0.1, ny <= 1.1 {
+                    let p = point(brightest)
+                    let outer = Path(ellipseIn: CGRect(x: p.x - 9, y: p.y - 9,
+                                                       width: 18, height: 18))
+                    context.stroke(outer, with: .color(palette.selected), lineWidth: 1.2)
+                    var cross = Path()
+                    cross.move(to: CGPoint(x: p.x - 13, y: p.y))
+                    cross.addLine(to: CGPoint(x: p.x - 9, y: p.y))
+                    cross.move(to: CGPoint(x: p.x + 9, y: p.y))
+                    cross.addLine(to: CGPoint(x: p.x + 13, y: p.y))
+                    cross.move(to: CGPoint(x: p.x, y: p.y - 13))
+                    cross.addLine(to: CGPoint(x: p.x, y: p.y - 9))
+                    cross.move(to: CGPoint(x: p.x, y: p.y + 9))
+                    cross.addLine(to: CGPoint(x: p.x, y: p.y + 13))
+                    context.stroke(cross, with: .color(palette.selected), lineWidth: 1.2)
+                    context.draw(Text("最亮").font(.system(size: 8))
+                                    .foregroundColor(palette.selected),
+                                 at: CGPoint(x: p.x, y: p.y - 17))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
     // MARK: - Grid / stars
 
     private func imageRect(in size: CGSize) -> CGRect {
@@ -458,6 +543,29 @@ struct MonitorView: View {
             }
         }
         .allowsHitTesting(false)
+    }
+
+    private func reconnectOverlay(size: CGSize) -> some View {
+        ZStack {
+            Color.black.opacity(0.58)
+            VStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(palette.amber)
+                Text(model.status.state.displayText)
+                    .font(CinemaFont.title(14))
+                    .foregroundStyle(palette.text)
+                Text(model.status.notes.first ?? "ICC 会话断开")
+                    .font(CinemaFont.tiny(9.5))
+                    .foregroundStyle(palette.textDim)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                Text("恢复后自动继续取景")
+                    .font(CinemaFont.tiny(9))
+                    .foregroundStyle(palette.textDim)
+            }
+        }
+        .frame(width: size.width, height: size.height)
     }
 
     private func disconnectedOverlay(size: CGSize) -> some View {

@@ -50,12 +50,23 @@ public enum CameraState: Equatable, Sendable {
     case connected
     case busy(String)
     case error(String)
+    /// ICC session closed and the app is rebuilding it. `attempt` is 0 while
+    /// the first retry is being scheduled, then 1...maxAttempts.
+    case reconnecting(attempt: Int, maxAttempts: Int)
+    /// Session was rebuilt; the UI shows this briefly before returning to
+    /// `.connected`.
+    case recovered
 
     public var isConnected: Bool {
         switch self {
-        case .connected, .busy: return true
+        case .connected, .busy, .recovered: return true
         default: return false
         }
+    }
+
+    public var isReconnecting: Bool {
+        if case .reconnecting = self { return true }
+        return false
     }
 
     public var displayText: String {
@@ -65,6 +76,9 @@ public enum CameraState: Equatable, Sendable {
         case .connected: return "已连接"
         case .busy(let what): return "忙碌：\(what)"
         case .error(let message): return "错误：\(message)"
+        case .reconnecting(let attempt, let maxAttempts):
+            return attempt > 0 ? "重连中 \(attempt)/\(maxAttempts)" : "重连中"
+        case .recovered: return "已恢复"
         }
     }
 }
@@ -151,6 +165,11 @@ public enum CameraError: Error, CustomStringConvertible, Equatable {
 }
 
 /// One live-view preview frame. `isSimulated` must be true for any synthetic source.
+///
+/// `image` is the measurement frame. For Nikon it is the decoded camera JPEG,
+/// exactly what focus and LiveView analysis consume. `displayImage`, when
+/// present, is a display-only stretched frame and must never be passed to
+/// measurement code.
 public struct LivePreview: @unchecked Sendable {
     public var sequence: UInt64
     public var image: CGImage
@@ -158,15 +177,21 @@ public struct LivePreview: @unchecked Sendable {
     public var height: Int
     public var timestamp: Date
     public var isSimulated: Bool
+    public var displayImage: CGImage?
+    public var stretchStats: LiveViewStretchStats?
 
     public init(sequence: UInt64, image: CGImage, width: Int, height: Int,
-                timestamp: Date = Date(), isSimulated: Bool) {
+                timestamp: Date = Date(), isSimulated: Bool,
+                displayImage: CGImage? = nil,
+                stretchStats: LiveViewStretchStats? = nil) {
         self.sequence = sequence
         self.image = image
         self.width = width
         self.height = height
         self.timestamp = timestamp
         self.isSimulated = isSimulated
+        self.displayImage = displayImage
+        self.stretchStats = stretchStats
     }
 }
 
@@ -197,6 +222,9 @@ public struct ImageRecord: Identifiable, @unchecked Sendable {
     public var verdict: QualityVerdict?
     public var note: String?
     public var qualityGroup: String?
+    /// Human-readable description of the master dark applied to this frame's
+    /// measurement luminance, or nil when no dark was subtracted.
+    public var darkApplied: String?
 
     public init(id: UUID = UUID(), sequence: Int, timestamp: Date = Date(),
                 source: ImageSource, fileURL: URL?,
@@ -206,7 +234,8 @@ public struct ImageRecord: Identifiable, @unchecked Sendable {
                 analysisLuma: LumaImage? = nil,
                 verdict: QualityVerdict? = nil,
                 note: String? = nil,
-                qualityGroup: String? = nil) {
+                qualityGroup: String? = nil,
+                darkApplied: String? = nil) {
         self.id = id
         self.sequence = sequence
         self.timestamp = timestamp
@@ -223,6 +252,7 @@ public struct ImageRecord: Identifiable, @unchecked Sendable {
         self.verdict = verdict
         self.note = note
         self.qualityGroup = qualityGroup
+        self.darkApplied = darkApplied
     }
 
     public var displayName: String {
@@ -249,4 +279,20 @@ public protocol CameraDevice: AnyObject, Sendable {
     func stopLiveView() async
     func livePreview() async throws -> LivePreview?
     func focusDrive(direction: FocusDirection, steps: Int) async throws
+    /// Turns the camera's own monitor on or off. Only backends that advertise
+    /// `.monitorControl` implement this; others use the default below.
+    func setScreen(on: Bool) async throws
+    /// Display-only stretch for LiveView. Backends that do not generate a
+    /// separate display frame ignore it.
+    func setLiveStretch(_ settings: LiveViewStretchSettings)
+}
+
+public extension CameraDevice {
+    /// Default: the backend cannot control the camera screen.
+    func setScreen(on: Bool) async throws {
+        throw CameraError.unsupported("相机屏控制")
+    }
+
+    /// Default: no separate display frame.
+    func setLiveStretch(_ settings: LiveViewStretchSettings) {}
 }

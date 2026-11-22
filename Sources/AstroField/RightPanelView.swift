@@ -3,21 +3,109 @@ import AstroFieldKit
 
 struct RightPanelView: View {
     @Environment(\.palette) private var palette
+    @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                PlanPanel()
-                GroupsPanel()
-                FocusPanel()
-                AnalysisPanel()
-                TrialPanel()
-                StackPanel()
-                QualityPanel()
-                SimulatorPanel()
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    PlanPanel()
+                    AutoPanel().id("auto")
+                    GroupsPanel()
+                    DarkPanel().id("dark")
+                    SessionPanel().id("session")
+                    FocusPanel()
+                    ViewfinderPanel().id("viewfinder")
+                    AnalysisPanel()
+                    TrialPanel()
+                    StackPanel()
+                    QualityPanel()
+                    SimulatorPanel()
+                }
+            }
+            .onChange(of: model.panelScrollTarget) { _, target in
+                guard let target else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(target, anchor: .top)
+                }
+                model.panelScrollTarget = nil
             }
         }
         .background(palette.panel)
+    }
+}
+
+// MARK: - Auto exposure
+
+private struct AutoPanel: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.palette) private var palette
+    @State private var focalText = ""
+
+    var body: some View {
+        PanelSection(title: "AUTO",
+                     subtitle: model.autoExposure.isRunning ? "搜索中" : "星空自动曝光",
+                     help: "按 NPF 规则估拖线上限，闭环试拍把背景调到满量程约 12%。只在背景、星点、拖线、饱和全部达标时写回计划。焦距留空时从第一张试拍的 EXIF 读取。",
+                     expandedByDefault: true) {
+            HStack(spacing: 8) {
+                TextField("焦距 mm（留空读 EXIF）", text: $focalText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(CinemaFont.tiny(10))
+                    .frame(width: 150)
+                    .onChange(of: focalText) { _, value in
+                        let trimmed = value.trimmingCharacters(in: .whitespaces)
+                        if trimmed.isEmpty {
+                            model.plan.focalLengthMM = nil
+                        } else if let focal = Double(trimmed), focal > 0 {
+                            model.plan.focalLengthMM = focal
+                        }
+                    }
+                Spacer()
+                Button(model.autoExposure.isRunning ? "搜索中…" : "星空 Auto") {
+                    model.runAutoExposure()
+                }
+                .buttonStyle(CinemaButtonStyle(prominent: true, compact: true))
+                .disabled(!model.canRunAutoExposure)
+                if model.autoExposure.isRunning {
+                    Button("取消") { model.cancelAutoExposure() }
+                        .buttonStyle(CinemaButtonStyle(danger: true, compact: true))
+                }
+            }
+
+            InfoRow(label: "焦距",
+                    value: model.plan.focalLengthMM.map { String(format: "%.0f mm", $0) } ?? "未记录")
+
+            if !model.autoExposure.message.isEmpty {
+                Text(model.autoExposure.message)
+                    .font(CinemaFont.tiny(10))
+                    .foregroundStyle(model.autoExposure.result?.status.isRecommended == true
+                                     ? palette.textSecondary : palette.amber)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let result = model.autoExposure.result {
+                InfoRow(label: "结论", value: result.status.displayText,
+                        color: result.status.isRecommended ? palette.textSecondary : palette.amber)
+                InfoRow(label: "建议", value: String(
+                    format: "ISO %d  %@  f/%.1f",
+                    result.settings.iso,
+                    CapturePlan.formatDuration(result.settings.exposureSeconds),
+                    result.settings.aperture ?? 2.8))
+            }
+
+            if !model.autoExposure.samples.isEmpty {
+                ForEach(Array(model.autoExposure.samples.enumerated()), id: \.offset) { index, sample in
+                    Text(String(format: "%d. ISO %d  %@  背景 %.0f  星点 %d  偏心 %.2f",
+                                index + 1, sample.settings.iso,
+                                CapturePlan.formatDuration(sample.settings.exposureSeconds),
+                                sample.metrics.background, sample.metrics.starCount,
+                                sample.metrics.medianEccentricity))
+                        .font(CinemaFont.tiny(9))
+                        .foregroundStyle(palette.textDim)
+                        .monospacedDigit()
+                }
+            }
+        }
     }
 }
 
@@ -342,6 +430,15 @@ private struct FocusPanel: View {
                 nudgeButton("方向 2  +50", .two, 50)
             }
 
+            if model.canControlCameraScreen {
+                Toggle("关闭相机屏", isOn: Binding(
+                    get: { model.cameraScreenOff },
+                    set: { model.setCameraScreen(off: $0) }))
+                    .toggleStyle(.checkbox)
+                    .font(CinemaFont.label(11))
+                    .help("PC mode 下关闭机身屏；打开时恢复 remote mode")
+            }
+
         }
     }
 
@@ -351,6 +448,287 @@ private struct FocusPanel: View {
         }
         .buttonStyle(CinemaButtonStyle(compact: true))
         .disabled(!model.status.state.isConnected || model.isRunning)
+    }
+}
+
+private struct ViewfinderPanel: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        PanelSection(title: "VIEWFINDER",
+                     subtitle: model.findStarMode ? "找星" : (model.liveAssistEnabled ? "取景辅助" : "取景"),
+                     help: "中心放大、星点标记和实时指标只作用于 LiveView，不改变照片或测量输入。拉伸只生成显示图，分析和对焦使用原始帧。找星模式临时把 ISO 提到 12800，退出时恢复原拍摄设置。") {
+            HStack(spacing: 8) {
+                Button(model.findStarMode ? "退出找星" : "找星模式") {
+                    model.toggleFindStarMode()
+                }
+                .buttonStyle(CinemaButtonStyle(prominent: !model.findStarMode, compact: true))
+                .disabled(!model.findStarMode && !model.canUseFindStarMode)
+
+                if model.findStarMode {
+                    Button("对焦最亮星") {
+                        model.focusBrightestStar()
+                    }
+                    .buttonStyle(CinemaButtonStyle(compact: true))
+                    .disabled(!model.canFocusBrightestStar)
+                }
+                Spacer()
+            }
+
+            if model.findStarMode {
+                InfoRow(label: "临时 ISO", value: "12800", color: palette.amber)
+                if let star = model.liveBrightestStar {
+                    InfoRow(label: "最亮星",
+                            value: String(format: "峰值 %.0f  FWHM %.2f", star.peak, star.fwhm))
+                }
+                if !model.findStarFocusMessage.isEmpty {
+                    InfoRow(label: "对焦结果", value: model.findStarFocusMessage,
+                            color: model.findStarFocusMessage.hasPrefix("已对焦")
+                                ? palette.selected : palette.amber)
+                }
+                if !model.findStarStatus.isEmpty {
+                    Text(model.findStarStatus)
+                        .font(CinemaFont.tiny(10))
+                        .foregroundStyle(model.findStarStatus.contains("未检测")
+                                         ? palette.amber : palette.textSecondary)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Toggle("取景辅助", isOn: Binding(
+                    get: { model.liveAssistEnabled },
+                    set: { model.setLiveAssist($0) }))
+                    .toggleStyle(.checkbox)
+                    .font(CinemaFont.label(11))
+                    .disabled(model.findStarMode)
+                Spacer()
+                Picker("", selection: Binding(
+                    get: { model.liveZoom },
+                    set: { model.setLiveZoom($0) })) {
+                    ForEach(LiveZoom.allCases) { zoom in
+                        Text(zoom.displayName).tag(zoom)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 116)
+                .disabled(!model.liveAssistEnabled)
+            }
+
+            if model.supportsLiveStretch {
+                Toggle("取景拉伸", isOn: Binding(
+                    get: { model.liveStretch.enabled },
+                    set: { model.setLiveStretchEnabled($0) }))
+                    .toggleStyle(.checkbox)
+                    .font(CinemaFont.label(11))
+                stretchRow(label: "增益",
+                           value: 30 / max(0.1, model.liveStretch.gainSigma),
+                           range: 0.5...5, step: 0.1,
+                           text: String(format: "%.1f×", 30 / max(0.1, model.liveStretch.gainSigma))) {
+                    model.setLiveStretchGain(30 / max(0.1, $0))
+                }
+                .disabled(!model.liveStretch.enabled)
+                stretchRow(label: "黑场", value: model.liveStretch.blackSigma, range: -3...3, step: 0.25,
+                           text: String(format: "%+.1fσ", model.liveStretch.blackSigma)) {
+                    model.setLiveStretchBlack($0)
+                }
+                .disabled(!model.liveStretch.enabled)
+                if let stats = model.liveStretchStats {
+                    InfoRow(label: "背景",
+                            value: String(format: "中位 %.0f / σ %.1f", stats.median, stats.sigma))
+                }
+                Toggle("保持后台活跃", isOn: Binding(
+                    get: { model.keepAlive },
+                    set: { model.setKeepAlive($0) }))
+                    .toggleStyle(.checkbox)
+                    .font(CinemaFont.label(11))
+                    .help("Nikon 连接期间阻止 App Nap 节流；显示仍可休眠")
+            }
+
+            if model.liveAssistEnabled {
+                InfoRow(label: "实时 FWHM",
+                        value: model.liveFWHM.map { String(format: "%.2f px", $0) } ?? "—")
+                InfoRow(label: "星点", value: "\(model.liveStars.count)")
+                InfoRow(label: "高光比例",
+                        value: String(format: "%.2f%%", model.liveClipFraction * 100),
+                        color: model.liveClipFraction > 0.001 ? palette.amber : nil)
+                HistogramView(bins: model.liveHistogram)
+            }
+        }
+    }
+
+    private func stretchRow(label: String, value: Double,
+                            range: ClosedRange<Double>, step: Double,
+                            text: String,
+                            set: @escaping (Double) -> Void) -> some View {
+        HStack(spacing: 6) {
+            Text(label)
+                .font(CinemaFont.tiny(10))
+                .foregroundStyle(palette.textDim)
+                .frame(width: 24, alignment: .leading)
+            Slider(value: Binding(get: { value }, set: set), in: range, step: step)
+            Text(text)
+                .font(CinemaFont.tiny(10))
+                .monospacedDigit()
+                .foregroundStyle(palette.textSecondary)
+                .frame(width: 38, alignment: .trailing)
+        }
+    }
+}
+
+// MARK: - Dark
+
+private struct DarkPanel: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        PanelSection(title: "DARK",
+                     subtitle: model.darkCollecting ? "采集中" : (model.darkEnabled ? "已启用" : "暗场校准"),
+                     help: "镜头盖暗场：按当前 ISO 与曝光采集多帧，均值合成 master dark。拍摄时按 ISO、曝光、来源与尺寸自动匹配；减除只影响测量分析与叠加，不修改文件。",
+                     expandedByDefault: true) {
+            Toggle("拍摄时减暗场", isOn: Binding(
+                get: { model.darkEnabled },
+                set: { model.setDarkEnabled($0) }))
+                .toggleStyle(.checkbox)
+                .font(CinemaFont.label(11))
+
+            HStack(spacing: 8) {
+                Stepper(value: $model.darkTarget, in: 1...32) {
+                    Text("\(model.darkTarget) 帧")
+                        .font(CinemaFont.label(11))
+                        .monospacedDigit()
+                }
+                Button(model.darkCollecting ? "采集中…" : "采集暗场") {
+                    model.collectDarks()
+                }
+                .buttonStyle(CinemaButtonStyle(prominent: true, compact: true))
+                .disabled(!model.canCollectDarks)
+                Spacer()
+            }
+
+            if model.darkCollecting {
+                Text("已采集 \(model.darkProgress)/\(model.darkTarget)　\(model.darkStatus)")
+                    .font(CinemaFont.tiny(10))
+                    .foregroundStyle(palette.amber)
+            } else if !model.darkStatus.isEmpty {
+                Text(model.darkStatus)
+                    .font(CinemaFont.tiny(10))
+                    .foregroundStyle(palette.textDim)
+            }
+
+            if model.darkMetas.isEmpty {
+                Text("尚未采集")
+                    .font(CinemaFont.tiny(10))
+                    .foregroundStyle(palette.textDim)
+            } else {
+                ForEach(model.darkMetas.prefix(6)) { meta in
+                    HStack(spacing: 6) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(String(format: "ISO %d  %@", meta.iso,
+                                        CapturePlan.formatDuration(meta.exposureSeconds)))
+                                .font(CinemaFont.smallValue(10.5))
+                                .foregroundStyle(palette.textSecondary)
+                            if meta.isUsable {
+                                Text(String(format: "%d 帧  %@  热像素 %d", meta.frameCount,
+                                            meta.createdAt.formatted(date: .omitted, time: .shortened),
+                                            meta.hotPixelCount))
+                                    .font(CinemaFont.tiny(9))
+                                    .foregroundStyle(palette.textDim)
+                            } else {
+                                Text("分布异常，未启用")
+                                    .font(CinemaFont.tiny(9))
+                                    .foregroundStyle(palette.amber)
+                            }
+                        }
+                        Spacer()
+                        Button("删除") { model.deleteDark(meta) }
+                            .buttonStyle(CinemaButtonStyle(danger: true, compact: true))
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Session
+
+private struct SessionPanel: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        PanelSection(title: "SESSION",
+                     subtitle: model.sessionInfo == nil ? "会话" : "\(model.sessionFrameCount) 帧",
+                     help: "每次开始序列或分组会建立带时间戳的会话目录。模拟帧写成 16-bit TIFF；真实 NEF 不复制、不改原文件，只写 sidecar。叠加成片与 CSV/JSON 报告导出到会话目录。",
+                     expandedByDefault: true) {
+            if let info = model.sessionInfo {
+                Text(info.name)
+                    .font(CinemaFont.smallValue(11))
+                    .foregroundStyle(palette.textSecondary)
+                Text(pathText(info.directory))
+                    .font(CinemaFont.tiny(9))
+                    .foregroundStyle(palette.textDim)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Text("尚未开始拍摄")
+                    .font(CinemaFont.tiny(10))
+                    .foregroundStyle(palette.textDim)
+            }
+
+            HStack(spacing: 6) {
+                Button("打开目录") { model.revealSession() }
+                    .buttonStyle(CinemaButtonStyle(compact: true))
+                    .disabled(model.sessionInfo == nil)
+                Button("导出叠加") { model.exportStackImage() }
+                    .buttonStyle(CinemaButtonStyle(compact: true))
+                    .disabled(!model.canExportStack)
+                Button("导出报告") { model.exportSessionReport() }
+                    .buttonStyle(CinemaButtonStyle(compact: true))
+                    .disabled(model.sessionInfo == nil)
+                Spacer()
+            }
+
+            HStack(spacing: 6) {
+                Button(model.sessionStack.isRunning ? "叠加中…" : "自动叠加") {
+                    model.stackSession()
+                }
+                .buttonStyle(CinemaButtonStyle(prominent: true, compact: true))
+                .disabled(!model.canStackSession)
+                Spacer()
+                if model.sessionStack.isRunning {
+                    Text("\(model.sessionStack.processed)/\(model.sessionStack.total)")
+                        .font(CinemaFont.tiny(9))
+                        .monospacedDigit()
+                        .foregroundStyle(palette.textDim)
+                }
+            }
+
+            if !model.sessionStack.message.isEmpty {
+                Text(model.sessionStack.message)
+                    .font(CinemaFont.tiny(9.5))
+                    .foregroundStyle(model.sessionStack.summary != nil
+                                     ? palette.textSecondary : palette.amber)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let url = model.sessionLastExport {
+                Text("最近导出 \(url.lastPathComponent)")
+                    .font(CinemaFont.tiny(9))
+                    .foregroundStyle(palette.textDim)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private func pathText(_ url: URL) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        if url.path.hasPrefix(home) {
+            return "~" + url.path.dropFirst(home.count)
+        }
+        return url.path
     }
 }
 
@@ -397,6 +775,12 @@ private struct AnalysisPanel: View {
                 } else {
                     Text("分析中…")
                         .font(CinemaFont.tiny(10))
+                        .foregroundStyle(palette.textDim)
+                }
+
+                if let dark = model.selectedRecord?.darkApplied {
+                    Text("已减暗场  \(dark)")
+                        .font(CinemaFont.tiny(9.5))
                         .foregroundStyle(palette.textDim)
                 }
 

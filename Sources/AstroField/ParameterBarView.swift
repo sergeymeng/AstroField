@@ -127,7 +127,7 @@ struct ParameterBarView: View {
                 Label("试拍", systemImage: "camera")
             }
             .buttonStyle(CinemaButtonStyle(compact: true))
-            .disabled(model.isRunning || model.isSingleShot)
+            .disabled(model.isRunning || model.isSingleShot || model.findStarMode)
 
             Button {
                 model.toggleStartPause()
@@ -141,7 +141,7 @@ struct ParameterBarView: View {
                 }
             }
             .buttonStyle(CinemaButtonStyle(prominent: !model.isRunning || model.isPaused, compact: true))
-            .disabled(model.status.state.isConnected == false)
+            .disabled(model.status.state.isConnected == false || model.findStarMode)
 
             Button {
                 model.stopSequence()

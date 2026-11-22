@@ -64,6 +64,15 @@ struct FocusUIState {
     var currentFWHM: Double?
 }
 
+enum LiveZoom: Int, CaseIterable, Identifiable {
+    case x1 = 1
+    case x2 = 2
+    case x4 = 4
+
+    var id: Int { rawValue }
+    var displayName: String { "\(rawValue)×" }
+}
+
 enum StackMode: String, CaseIterable, Identifiable {
     case mean
     case trails
@@ -91,6 +100,48 @@ struct QualityUIState {
     var lastAction = ""
     var autoPause = true
     var autoRefocus = false
+}
+
+struct AutoExposureUIState {
+    var isRunning = false
+    var step = 0
+    var message = ""
+    var samples: [AutoExposureSample] = []
+    var result: AutoExposureResult?
+}
+
+struct SessionStackUIState {
+    var isRunning = false
+    var processed = 0
+    var total = 0
+    var message = ""
+    var summary: SessionStackSummary?
+    var exportURL: URL?
+}
+
+private final class AutoFocusLengthBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Double?
+    private var sequence = 0
+
+    init(focalLengthMM: Double?) {
+        value = focalLengthMM
+    }
+
+    var focalLength: Double? {
+        lock.lock(); defer { lock.unlock() }
+        return value
+    }
+
+    func updateFocalLength(_ focal: Double) {
+        lock.lock(); value = focal; lock.unlock()
+    }
+
+    func nextSequence() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        sequence += 1
+        return -3000 - sequence
+    }
 }
 
 struct QualityPoint: Identifiable, Equatable {
@@ -155,6 +206,20 @@ final class AppModel: ObservableObject {
     @Published var liveImage: CGImage?
     @Published var liveSequence: UInt64 = 0
     @Published var liveFrozen = false
+    @Published var liveAssistEnabled = false
+    @Published var liveZoom: LiveZoom = .x1
+    @Published var liveStars: [DetectedStar] = []
+    @Published var liveFWHM: Double?
+    @Published var liveHistogram: [Double] = []
+    @Published var liveClipFraction: Double = 0
+    @Published var liveStretch = LiveViewStretchSettings.default
+    @Published var liveStretchStats: LiveViewStretchStats?
+    @Published var keepAlive = true
+    @Published var findStarMode = false
+    @Published var findStarStatus = ""
+    @Published var findStarFocusMessage = ""
+    @Published var liveBrightestStar: DetectedStar?
+    @Published var finderTestFrameShown = false
     @Published var stackImage: CGImage?
     @Published var now = Date()
 
@@ -173,6 +238,8 @@ final class AppModel: ObservableObject {
     @Published var cornerFWHM: [String: Double] = [:]
 
     @Published var focus = FocusUIState()
+    @Published var autoExposure = AutoExposureUIState()
+    @Published var sessionStack = SessionStackUIState()
     @Published var stack = StackUIState()
     @Published var quality = QualityUIState()
     @Published var qualityTimeline: [QualityPoint] = []
@@ -196,6 +263,21 @@ final class AppModel: ObservableObject {
     @Published var focusBracketRunning = false
     @Published var lensProfileCount = 0
 
+    // Dark calibration
+    @Published var darkMetas: [MasterDarkMeta] = []
+    @Published var darkEnabled = false
+    @Published var darkCollecting = false
+    @Published var darkProgress = 0
+    @Published var darkTarget = 8
+    @Published var darkStatus = ""
+    @Published var cameraScreenOff = false
+
+    // Session recording
+    @Published var sessionInfo: SessionInfo?
+    @Published var sessionFrameCount = 0
+    @Published var sessionLastExport: URL?
+    @Published var panelScrollTarget: String?
+
     // MARK: - Private state
 
     private(set) var camera: CameraDevice?
@@ -205,12 +287,28 @@ final class AppModel: ObservableObject {
     private var currentRunID: UUID?
     private var liveTask: Task<Void, Never>?
     private var liveViewStarted = false
+    private var liveAnalysisBusy = false
+    private var lastLiveAnalysis = Date.distantPast
+    private var lastLiveErrorText = ""
+    private var lastLiveErrorAt = Date.distantPast
     private var suppressLive = false
+    private var reconnectTask: Task<Void, Never>?
+    private var reconnectGeneration = 0
+    private var activityToken: NSObjectProtocol?
+    private var finderSavedSettings: ExposureSettings?
+    private var finderSavedAssist = false
+    private var finderModeStartedAt = Date.distantPast
+    private var finderZeroFrames = 0
+    private var finderTestAttempted = false
+    private var finderTestRunning = false
+    private var pendingRestore: ExposureSettings?
     private var analysisChain: Task<Void, Never>?
     private var focusTask: Task<Void, Never>?
     private var groupTask: Task<Void, Never>?
     private var groupStopRequested = false
     private let focusCancel = CancelFlag()
+    private let autoCancel = CancelFlag()
+    private var autoTask: Task<Void, Never>?
     private var stacker: LiveStacker?
     private var trailStacker: StarTrailStacker?
     private var stackedIDs: Set<UUID> = []
@@ -220,10 +318,25 @@ final class AppModel: ObservableObject {
     private var userPinnedSelection = false
     private let presetStore = PresetStore()
     private let lensStore = LensProfileStore()
+    private let darkLibrary: DarkLibrary
+    private let sessionStore: SessionStore
+    private var sidecarByFrameID: [UUID: FrameSidecar] = [:]
+    private var sessionWriteChain: Task<Void, Never>?
+    private var darkRunID: UUID?
 
     // MARK: - Init
 
     init() {
+        let env = ProcessInfo.processInfo.environment
+        let darkDirectory = env["ASTROFIELD_DARK_DIR"].flatMap {
+            $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true)
+        }
+        let sessionRoot = env["ASTROFIELD_SESSION_ROOT"].flatMap {
+            $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true)
+        }
+        darkLibrary = DarkLibrary(directory: darkDirectory)
+        sessionStore = SessionStore(root: sessionRoot)
+        darkMetas = darkLibrary.all()
         presets = presetStore.load()
         if let last = presetStore.lastPlan() {
             plan = last
@@ -232,17 +345,20 @@ final class AppModel: ObservableObject {
         if !storedGroups.isEmpty {
             groups = storedGroups
         }
-        nightMode = ProcessInfo.processInfo.environment["ASTROFIELD_NIGHT"] == "1"
+        nightMode = env["ASTROFIELD_NIGHT"] == "1"
         lensProfileCount = lensStore.load().count
+        observePowerEvents()
         ticker = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.now = Date() }
         }
         appendLog("AstroField 启动，默认使用模拟相机")
-        let env = ProcessInfo.processInfo.environment
         let demo = env["ASTROFIELD_DEMO"]
         if demo == "disconnected" { return }
         if env["ASTROFIELD_SOURCE"] == "nikon" {
-            Task { await connect(.nikon) }
+            Task {
+                await connect(.nikon)
+                await runDemoIfNeeded(demo)
+            }
             return
         }
         if let dir = env["ASTROFIELD_PLAYBACK_DIR"] {
@@ -259,8 +375,26 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func runDemoIfNeeded(_ name: String?) async {
-        guard let name, name != "idle", name != "disconnected" else { return }
+    /// Power events are recorded next to ICC errors so a dropped session can
+    /// be correlated with display or system sleep on the next hardware run.
+    private func observePowerEvents() {
+        let center = NSWorkspace.shared.notificationCenter
+        let names: [(Notification.Name, String, LogEntry.Level)] = [
+            (NSWorkspace.screensDidSleepNotification, "显示休眠", .info),
+            (NSWorkspace.screensDidWakeNotification, "显示唤醒", .info),
+            (NSWorkspace.willSleepNotification, "系统休眠", .warning),
+            (NSWorkspace.didWakeNotification, "系统唤醒", .info)
+        ]
+        for (name, text, level) in names {
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    self?.appendLog(text, level: level)
+                }
+            }
+        }
+    }
+
+    private func runDemoIfNeeded(_ name: String?) async {        guard let name, name != "idle", name != "disconnected" else { return }
         switch name {
         case "exposing":
             plan.start = .delay(seconds: 2)
@@ -322,6 +456,140 @@ final class AppModel: ObservableObject {
             plan.exposureSeconds = 0.4
             try? await Task.sleep(nanoseconds: 500_000_000)
             runFocusBracket()
+        case "focusassist":
+            setLiveAssist(true)
+            setLiveZoom(.x2)
+            plan.start = .delay(seconds: 300)
+            startSequence()
+        case "findstar":
+            plan.exposureSeconds = 1
+            plan.iso = 1600
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            enterFindStarMode()
+            panelScrollTarget = "viewfinder"
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            panelScrollTarget = "viewfinder"
+        case "findstarblack":
+            setSimulatorCondition(.noStars)
+            plan.exposureSeconds = 1
+            plan.iso = 1600
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            enterFindStarMode()
+            panelScrollTarget = "viewfinder"
+            try? await Task.sleep(nanoseconds: 13_000_000_000)
+            panelScrollTarget = "viewfinder"
+        case "findstarfocus":
+            plan.exposureSeconds = 1
+            plan.iso = 1600
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            enterFindStarMode()
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            focusBrightestStar()
+            panelScrollTarget = "viewfinder"
+            try? await Task.sleep(nanoseconds: 12_000_000_000)
+            panelScrollTarget = "viewfinder"
+        case "nikonshot":
+            plan.exposureSeconds = 1
+            plan.iso = 800
+            await waitUntil({ !self.focus.isRunning }, timeout: 120)
+            captureOnce()
+            try? await Task.sleep(nanoseconds: 18_000_000_000)
+        case "nikonaf":
+            runAutoFocus()
+            await waitUntil({ !self.focus.isRunning }, timeout: 120)
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+        case "nikonseq":
+            plan.start = .immediate
+            plan.exposureSeconds = 1
+            plan.iso = 800
+            plan.interval = .afterExposure(seconds: 2)
+            plan.end = .count(3)
+            startSequence()
+            await waitUntil({
+                self.progress.phase == .finished
+                    || self.progress.phase == .stopped
+                    || self.progress.phase == .failed
+            }, timeout: 180)
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            exportSessionReport()
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        case "nikondark":
+            plan.exposureSeconds = 1
+            plan.iso = 800
+            darkTarget = 2
+            collectDarks()
+            await waitUntil({ !self.darkCollecting }, timeout: 180)
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        case "nikonscreen":
+            setCameraScreen(off: true)
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+        case "nikonscreenon":
+            setCameraScreen(off: false)
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+        case "auto":
+            plan.exposureSeconds = 8
+            plan.iso = 1600
+            plan.aperture = 2.8
+            plan.focalLengthMM = nil
+            runAutoExposure()
+            await waitUntil({ !self.autoExposure.isRunning }, timeout: 90)
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            panelScrollTarget = "auto"
+        case "autostack":
+            plan.exposureSeconds = 1.0
+            plan.iso = 1600
+            var group = ShootGroup.defaults()[0]
+            group.plan.exposureSeconds = 1.0
+            group.plan.iso = 1600
+            group.plan.interval = .afterExposure(seconds: 0.1)
+            group.plan.end = .count(3)
+            groups = [group]
+            startGroupShoot()
+            await waitUntil({ !self.groupRunning }, timeout: 60)
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            stackSession()
+            await waitUntil({ !self.sessionStack.isRunning }, timeout: 120)
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            panelScrollTarget = "session"
+        case "dark":
+            plan.exposureSeconds = 0.5
+            plan.iso = 1600
+            darkTarget = 2
+            collectDarks()
+            await waitUntil({ !self.darkCollecting }, timeout: 30)
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            captureOnce()
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            panelScrollTarget = "dark"
+        case "fullchain":
+            setSimulatorFocus(380)
+            plan.exposureSeconds = 0.5
+            plan.iso = 1600
+            darkTarget = 3
+            collectDarks()
+            await waitUntil({ !self.darkCollecting }, timeout: 30)
+            var sky = ShootGroup.defaults()[0]
+            sky.plan.exposureSeconds = 0.5
+            sky.plan.iso = 1600
+            sky.plan.interval = .afterExposure(seconds: 0.1)
+            sky.plan.end = .count(2)
+            var ground = ShootGroup.defaults()[1]
+            ground.plan.exposureSeconds = 0.5
+            ground.plan.iso = 1600
+            ground.plan.interval = .afterExposure(seconds: 0.1)
+            ground.plan.end = .count(1)
+            ground.focusOffsetSteps = 40
+            groups = [sky, ground]
+            toggleStacking(true)
+            startGroupShoot()
+            await waitUntil({ !self.groupRunning }, timeout: 40)
+            runAutoFocus()
+            await waitUntil({ !self.focus.isRunning }, timeout: 40)
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            exportStackImage()
+            exportSessionReport()
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            panelScrollTarget = "session"
         case "trails":
             simulator?.updateScene { scene in
                 scene.driftX = 12
@@ -366,6 +634,15 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Bounded wait used by demos so a slow simulation never captures mid-state.
+    private func waitUntil(_ condition: () -> Bool, timeout: Double) async {
+        var waited = 0.0
+        while !condition() && waited < timeout {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            waited += 0.2
+        }
+    }
+
     // MARK: - Derived
 
     var isRunning: Bool {
@@ -398,6 +675,16 @@ final class AppModel: ObservableObject {
             && !isRunning
     }
 
+    var canNudgeFocus: Bool {
+        guard status.state.isConnected,
+              status.capabilities.contains(.manualFocusDrive),
+              !findStarMode else { return false }
+        switch progress.phase {
+        case .exposing, .stopping: return false
+        default: return true
+        }
+    }
+
     var planIssues: [String] {
         ScheduleCalculator.preflight(plan: plan)
     }
@@ -418,6 +705,9 @@ final class AppModel: ObservableObject {
     var monitorImage: CGImage? {
         switch monitorMode {
         case .live:
+            if let liveImage, liveZoom.rawValue > 1 {
+                return ImageCrop.centerCrop(liveImage, zoom: liveZoom.rawValue)
+            }
             return liveImage
         case .last:
             if analysisCrop != .full, let analysisPreview {
@@ -464,9 +754,9 @@ final class AppModel: ObservableObject {
 
     var connectionColor: Color {
         switch status.state {
-        case .connected: return .white.opacity(0.85)
+        case .connected, .recovered: return .white.opacity(0.85)
         case .busy: return Palette.dark.amber
-        case .connecting: return Palette.dark.amber
+        case .connecting, .reconnecting: return Palette.dark.amber
         case .error: return Palette.dark.red
         case .disconnected: return Palette.dark.textDim
         }
@@ -494,14 +784,32 @@ final class AppModel: ObservableObject {
         case .playback:
             device = PlaybackCamera(directory: playbackDirectory)
         case .nikon:
-            device = NikonCamera()
+            let cam = NikonCamera()
+            cam.setLiveStretch(liveStretch)
+            cam.onSessionLost = { [weak self] reason in
+                Task { @MainActor in
+                    self?.handleSessionLost(reason)
+                }
+            }
+            cam.onDiagnostic = { [weak self] line in
+                Task { @MainActor in
+                    self?.appendLog("ICC：\(line)", level: .warning)
+                }
+            }
+            device = cam
         }
         camera = device
         device.onStatusChange = { [weak self] status in
             Task { @MainActor in
                 guard let self else { return }
+                // The reconnect loop owns the status text while it runs.
+                if self.reconnectTask != nil, !status.state.isConnected { return }
+                if case .recovered = self.status.state, case .connected = status.state {
+                    return
+                }
                 self.status = status
-                if case .error(let message) = status.state {
+                self.updateActivity()
+                if case .error(let message) = status.state, self.reconnectTask == nil {
                     self.appendLog("相机错误：\(message)", level: .error)
                 }
             }
@@ -510,6 +818,7 @@ final class AppModel: ObservableObject {
             try await device.connect()
             status = device.status
             appendLog("已连接 \(device.status.model)（\(kind.displayName)）")
+            updateActivity()
             refreshLiveLoop()
         } catch {
             status = CameraStatus(state: .error(String(describing: error)),
@@ -522,7 +831,11 @@ final class AppModel: ObservableObject {
     }
 
     private func teardownCamera() async {
+        reconnectGeneration += 1
+        reconnectTask?.cancel()
+        reconnectTask = nil
         focusCancel.set()
+        autoCancel.set()
         stopSequence()
         liveTask?.cancel()
         liveTask = nil
@@ -534,10 +847,27 @@ final class AppModel: ObservableObject {
         camera = nil
         simulator = nil
         liveImage = nil
+        liveStretchStats = nil
+        findStarMode = false
+        findStarStatus = ""
+        findStarFocusMessage = ""
+        liveBrightestStar = nil
+        finderTestAttempted = true
+        finderTestRunning = false
+        finderTestFrameShown = false
+        finderSavedSettings = nil
+        finderZeroFrames = 0
+        pendingRestore = nil
         stacker = nil
         stackImage = nil
         stack = StackUIState()
+        sessionStore.endSession()
+        sessionInfo = nil
+        sessionFrameCount = 0
+        sidecarByFrameID.removeAll()
+        cameraScreenOff = false
         status = CameraStatus(state: .disconnected, model: "—", capabilities: [])
+        updateActivity()
     }
 
     func disconnect() {
@@ -558,29 +888,395 @@ final class AppModel: ObservableObject {
 
     // MARK: - Live view
 
+    func setLiveAssist(_ enabled: Bool) {
+        if findStarMode && !enabled { return }
+        liveAssistEnabled = enabled
+        if !enabled {
+            liveStars = []
+            liveBrightestStar = nil
+            liveFWHM = nil
+            liveHistogram = []
+            liveClipFraction = 0
+            liveZoom = .x1
+        }
+    }
+
+    func setLiveZoom(_ zoom: LiveZoom) {
+        liveZoom = zoom
+    }
+
+    // MARK: - Find stars
+
+    var supportsLiveStretch: Bool {
+        sourceKind != .playback && status.capabilities.contains(.liveView)
+    }
+
+    var canUseFindStarMode: Bool {
+        guard status.state.isConnected, sourceKind != .playback else { return false }
+        return !isRunning && !focus.isRunning && !darkCollecting && !isSingleShot
+            && !groupRunning && !autoExposure.isRunning && !finderTestRunning
+    }
+
+    var canFocusBrightestStar: Bool {
+        findStarMode && status.state.isConnected
+            && status.capabilities.contains(.manualFocusDrive)
+            && liveBrightestStar != nil && !focus.isRunning && !finderTestRunning
+    }
+
+    func toggleFindStarMode() {
+        if findStarMode {
+            exitFindStarMode()
+        } else {
+            enterFindStarMode()
+        }
+    }
+
+    func enterFindStarMode() {
+        guard let camera, canUseFindStarMode else {
+            showToast("当前状态不能进入找星模式", kind: .warning)
+            return
+        }
+        finderSavedSettings = plan.settings
+        finderSavedAssist = liveAssistEnabled
+        finderModeStartedAt = Date()
+        finderZeroFrames = 0
+        finderTestAttempted = false
+        finderTestRunning = false
+        finderTestFrameShown = false
+        liveBrightestStar = nil
+        findStarFocusMessage = ""
+        findStarMode = true
+        liveAssistEnabled = true
+        liveZoom = .x1
+        if monitorMode != .live { monitorMode = .live }
+        findStarStatus = "临时 ISO 12800，寻找星点…"
+        var boosted = plan.settings
+        boosted.iso = 12800
+        Task {
+            do {
+                try await camera.apply(boosted)
+                appendLog("找星模式：临时 ISO 12800", level: .info)
+                refreshLiveLoop()
+            } catch {
+                findStarStatus = "设置 ISO 失败：\(error)"
+                appendLog("找星模式设置失败：\(error)", level: .error)
+                exitFindStarMode()
+            }
+        }
+    }
+
+    func exitFindStarMode() {
+        guard findStarMode else { return }
+        findStarMode = false
+        findStarStatus = ""
+        findStarFocusMessage = ""
+        liveBrightestStar = nil
+        finderTestAttempted = true
+        finderTestFrameShown = false
+        liveAssistEnabled = finderSavedAssist
+        let saved = finderSavedSettings ?? plan.settings
+        finderSavedSettings = nil
+        guard let camera, status.state.isConnected else {
+            pendingRestore = saved
+            return
+        }
+        Task {
+            do {
+                try await camera.apply(saved)
+                appendLog("找星模式退出，已恢复拍摄设置", level: .info)
+            } catch {
+                pendingRestore = saved
+                appendLog("恢复拍摄设置失败：\(error)", level: .warning)
+            }
+            refreshLiveLoop()
+        }
+    }
+
+    func focusBrightestStar() {
+        guard let camera, let star = liveBrightestStar, canFocusBrightestStar else { return }
+        focusCancel.clear()
+        findStarFocusMessage = "对焦中…"
+        focus = FocusUIState(isRunning: true, samples: [], message: "对焦最亮星…",
+                             result: nil, currentFWHM: nil)
+        let isSimulator = sourceKind == .simulator
+        // A narrow window around the star keeps the search on that star; the
+        // camera itself is never moved, only the lens is driven.
+        let region = CGRect(x: min(max(0, star.x - 0.10), 0.70),
+                            y: min(max(0, star.y - 0.12), 0.70),
+                            width: 0.20, height: 0.24)
+        focusTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                suppressLive = true
+                liveTask?.cancel()
+                liveTask = nil
+                if !liveViewStarted {
+                    try await camera.startLiveView()
+                    liveViewStarted = true
+                }
+                let cancelFlag = focusCancel
+                let probe = ClosureFocusProbe(
+                    measure: {
+                        if isSimulator,
+                           let sim = camera as? SimulatorCamera,
+                           let luma = try? await sim.liveLumaPreview() {
+                            return StarDetector.measureFast(in: luma, region: region)
+                        }
+                        if let frame = try await camera.livePreview(),
+                           let luma = LumaImage.from(cgImage: frame.image) {
+                            return StarDetector.measureFast(in: luma, region: region)
+                        }
+                        return FocusMeasurement(medianFWHM: 0, starCount: 0,
+                                                medianEccentricity: 0)
+                    },
+                    move: { signed in
+                        let direction: FocusDirection = signed > 0 ? .one : .two
+                        try await camera.focusDrive(direction: direction, steps: abs(signed))
+                    })
+                var config = FocusSearchConfig()
+                config.minStars = 1
+                config.coarseStep = 20
+                config.fineStep = 4
+                config.maxCoarseMovesPerDirection = 6
+                config.verifySamples = 3
+                config.minImprovement = 0.04
+                let result = await FocusSearcher().run(
+                    probe: probe,
+                    config: config,
+                    onSample: { sample in
+                        Task { @MainActor [weak self] in
+                            guard let self else { return }
+                            self.focus.samples.append(sample)
+                            self.focus.currentFWHM = sample.measurement.medianFWHM
+                            self.focus.message = String(format: "步数 %+d，FWHM %.2f",
+                                                        sample.relativeSteps,
+                                                        sample.measurement.medianFWHM)
+                        }
+                    },
+                    shouldCancel: { cancelFlag.isSet })
+                focus.isRunning = false
+                focus.result = result
+                focus.message = result.message
+                findStarStatus = result.status == .confirmed
+                    ? String(format: "最亮星已对焦，FWHM %.2f", result.best?.medianFWHM ?? 0)
+                    : "最亮星对焦未确认：\(result.message)"
+                findStarFocusMessage = result.status == .confirmed
+                    ? String(format: "已对焦  FWHM %.2f", result.best?.medianFWHM ?? 0)
+                    : "未确认：\(result.message)"
+                appendLog("找星对焦：\(result.message)",
+                          level: result.status == .confirmed ? .info : .warning)
+                suppressLive = false
+                refreshLiveLoop()
+            } catch {
+                focus.isRunning = false
+                focus.message = "对焦失败：\(error)"
+                findStarStatus = "最亮星对焦失败：\(error)"
+                findStarFocusMessage = "失败：\(error)"
+                appendLog(focus.message, level: .error)
+                suppressLive = false
+                refreshLiveLoop()
+            }
+        }
+    }
+
+    private func maybeAnalyzeLiveFrame(_ image: CGImage) {
+        guard liveAssistEnabled || findStarMode, !liveAnalysisBusy,
+              Date().timeIntervalSince(lastLiveAnalysis) > 0.45 else { return }
+        liveAnalysisBusy = true
+        lastLiveAnalysis = Date()
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            var stars: [DetectedStar] = []
+            var fwhm: Double?
+            var histogram: [Double] = []
+            var clip = 0.0
+            if let luma = LumaImage.from(cgImage: image) {
+                let small = luma.downsampled(maxWidth: 700)
+                stars = StarDetector.detect(in: small, maxStars: 60).map { star in
+                    var copy = star
+                    copy.x = star.x / Double(small.width)
+                    copy.y = star.y / Double(small.height)
+                    return copy
+                }
+                fwhm = StarDetector.measureFast(
+                    in: luma,
+                    region: CGRect(x: 0.2, y: 0.2, width: 0.6, height: 0.6)).medianFWHM
+                histogram = AppModel.histogram(of: small, bins: 48)
+                let stride = max(1, luma.pixels.count / 60_000)
+                let threshold = luma.maxValue * 0.98
+                var clipped = 0
+                var sampled = 0
+                var i = 0
+                while i < luma.pixels.count {
+                    if luma.pixels[i] >= threshold { clipped += 1 }
+                    sampled += 1
+                    i += stride
+                }
+                clip = sampled > 0 ? Double(clipped) / Double(sampled) : 0
+            }
+            await MainActor.run {
+                if self.liveAssistEnabled || self.findStarMode {
+                    self.liveStars = stars
+                    self.liveBrightestStar = stars.max { $0.peak < $1.peak }
+                    self.liveFWHM = fwhm
+                    self.liveHistogram = histogram
+                    self.liveClipFraction = clip
+                }
+                self.considerFinderTestFrame(stars: stars)
+                self.liveAnalysisBusy = false
+            }
+        }
+    }
+
+    /// When LiveView stays starless in find mode, fall back to one short JPEG
+    /// exposure. It is decoded, stretched and discarded; no session record.
+    private func considerFinderTestFrame(stars: [DetectedStar]) {
+        guard findStarMode, !finderTestRunning else { return }
+        if stars.isEmpty {
+            finderZeroFrames += 1
+            findStarStatus = "未检测到星点"
+            guard !finderTestAttempted,
+                  finderZeroFrames >= 3,
+                  Date().timeIntervalSince(finderModeStartedAt) > 2.5 else { return }
+            finderTestAttempted = true
+            captureFinderTestFrame()
+        } else {
+            finderZeroFrames = 0
+            findStarStatus = "检测到 \(stars.count) 颗星"
+        }
+    }
+
+    private func captureFinderTestFrame() {
+        guard let camera, findStarMode, !finderTestRunning else { return }
+        finderTestRunning = true
+        findStarStatus = "测试帧：2 s / ISO 12800 / JPEG"
+        suppressLive = true
+        liveTask?.cancel()
+        liveTask = nil
+        liveViewStarted = false
+        let saved = finderSavedSettings ?? plan.settings
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let raw: CGImage
+                let luma: LumaImage
+                if let nikon = camera as? NikonCamera {
+                    let frame = try await nikon.captureFinderFrame(iso: 12800, exposureSeconds: 2)
+                    raw = frame.image
+                    luma = frame.luma
+                } else {
+                    var test = saved
+                    test.iso = 12800
+                    test.exposureSeconds = 2
+                    test.compression = .jpegFine
+                    try await camera.apply(test)
+                    let record = try await camera.capture(sequence: -1)
+                    guard let analysis = record.analysisLuma
+                        ?? record.preview.flatMap({ LumaImage.from(cgImage: $0) }) else {
+                        throw CameraError.io("测试帧解码失败")
+                    }
+                    let displaySource = analysis.downsampled(maxWidth: 2200)
+                    guard let preview = displaySource.displayImage(low: 0,
+                                                                   high: max(1, displaySource.maxValue),
+                                                                   gamma: 1)
+                        ?? record.preview
+                        ?? analysis.displayImage() else {
+                        throw CameraError.io("测试帧预览失败")
+                    }
+                    luma = analysis
+                    raw = preview
+                }
+                if self.findStarMode {
+                    let small = luma.downsampled(maxWidth: 1000)
+                    let stars = StarDetector.detect(in: small, maxStars: 80).map { star -> DetectedStar in
+                        var copy = star
+                        copy.x = star.x / Double(small.width)
+                        copy.y = star.y / Double(small.height)
+                        return copy
+                    }
+                    self.liveStars = stars
+                    self.liveBrightestStar = stars.max { $0.peak < $1.peak }
+                    if let display = LiveViewStretch.stretch(raw, settings: self.liveStretch) {
+                        self.liveImage = display.image
+                        self.liveStretchStats = display.stats
+                    } else {
+                        self.liveImage = raw
+                    }
+                    self.finderTestFrameShown = true
+                    self.findStarStatus = stars.isEmpty
+                        ? "测试帧：未检测到星点"
+                        : "测试帧：检测到 \(stars.count) 颗星"
+                    self.appendLog("找星测试帧：\(stars.count) 颗星",
+                                   level: stars.isEmpty ? .warning : .info)
+                }
+            } catch {
+                findStarStatus = "测试帧失败：\(error)"
+                appendLog("找星测试帧失败：\(error)", level: .error)
+            }
+            if self.status.state.isConnected {
+                do {
+                    try await camera.apply(saved)
+                } catch {
+                    self.pendingRestore = saved
+                    self.appendLog("测试帧后恢复设置失败：\(error)", level: .warning)
+                }
+            } else {
+                self.pendingRestore = saved
+            }
+            if self.findStarMode {
+                // Hold the test frame long enough to be seen, then resume live.
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+            }
+            self.suppressLive = false
+            self.finderTestRunning = false
+            if self.status.state.isConnected { self.refreshLiveLoop() }
+        }
+    }
+
     func refreshLiveLoop() {
         liveTask?.cancel()
         liveTask = nil
-        guard let camera, status.capabilities.contains(.liveView),
+        guard let camera, status.state.isConnected,
+              status.capabilities.contains(.liveView),
               monitorMode == .live, !suppressLive else { return }
+        let nikonPacing = sourceKind == .nikon
         liveTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 if self.monitorMode != .live || self.suppressLive { break }
+                let frameStart = Date()
                 do {
                     if !self.liveViewStarted {
                         try await camera.startLiveView()
                         self.liveViewStarted = true
                     }
                     if let frame = try await camera.livePreview() {
-                        self.liveImage = frame.image
+                        guard !Task.isCancelled else { break }
+                        self.liveImage = frame.displayImage ?? frame.image
                         self.liveSequence = frame.sequence
+                        self.liveStretchStats = frame.stretchStats
+                        self.finderTestFrameShown = false
+                        self.lastLiveErrorText = ""
+                        self.maybeAnalyzeLiveFrame(frame.image)
                     }
                 } catch {
-                    self.appendLog("取景错误：\(error)", level: .warning)
+                    if Task.isCancelled { break }
+                    if self.isSessionLoss(error), self.sourceKind == .nikon {
+                        self.liveViewStarted = false
+                        self.handleSessionLost(String(describing: error))
+                        break
+                    }
+                    self.logLiveError(error)
                     try? await Task.sleep(nanoseconds: 300_000_000)
                 }
-                try? await Task.sleep(nanoseconds: 70_000_000)
+                if nikonPacing {
+                    let remaining = 1.0 / 15.0 - Date().timeIntervalSince(frameStart)
+                    if remaining > 0 {
+                        try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+                    }
+                } else {
+                    try? await Task.sleep(nanoseconds: 70_000_000)
+                }
             }
         }
     }
@@ -593,10 +1289,175 @@ final class AppModel: ObservableObject {
         refreshLiveLoop()
     }
 
+    // MARK: - Display stretch and activity
+
+    func setLiveStretchEnabled(_ enabled: Bool) {
+        liveStretch.enabled = enabled
+        camera?.setLiveStretch(liveStretch)
+    }
+
+    func setLiveStretchGain(_ gain: Double) {
+        liveStretch.gainSigma = gain
+        camera?.setLiveStretch(liveStretch)
+    }
+
+    func setLiveStretchBlack(_ black: Double) {
+        liveStretch.blackSigma = black
+        camera?.setLiveStretch(liveStretch)
+    }
+
+    func setKeepAlive(_ enabled: Bool) {
+        keepAlive = enabled
+        updateActivity()
+    }
+
+    /// Prevents App Nap while a Nikon session is live. Display sleep is still
+    /// allowed; the point is to keep the LiveView polling loop at full rate.
+    private func updateActivity() {
+        let active: Bool
+        switch status.state {
+        case .connected, .busy, .recovered, .reconnecting:
+            active = true
+        default:
+            active = false
+        }
+        let should = sourceKind == .nikon && keepAlive && active
+        if should, activityToken == nil {
+            activityToken = ProcessInfo.processInfo.beginActivity(
+                options: [.userInitiatedAllowingIdleSystemSleep],
+                reason: "AstroField Nikon 会话取景与拍摄")
+        } else if !should, let token = activityToken {
+            ProcessInfo.processInfo.endActivity(token)
+            activityToken = nil
+        }
+    }
+
+    // MARK: - ICC reconnect
+
+    private func handleSessionLost(_ reason: String) {
+        guard sourceKind == .nikon, camera is NikonCamera, !isConnecting else { return }
+        guard reconnectTask == nil else { return }
+        reconnectGeneration += 1
+        let generation = reconnectGeneration
+        focusCancel.set()
+        autoCancel.set()
+        liveTask?.cancel()
+        liveTask = nil
+        liveViewStarted = false
+        liveStretchStats = nil
+        if isRunning && !isPaused { pauseSequence() }
+        let base = status
+        status = CameraStatus(state: .reconnecting(attempt: 0,
+                                                   maxAttempts: ReconnectPolicy.default.maxAttempts),
+                              model: base.model,
+                              firmware: base.firmware,
+                              lens: base.lens,
+                              batteryPercent: base.batteryPercent,
+                              capabilities: base.capabilities,
+                              notes: ["ICC 会话断开：\(reason)"])
+        if findStarMode { exitFindStarMode() }
+        appendLog("ICC 会话断开：\(reason)", level: .error)
+        updateActivity()
+        guard let cam = camera as? NikonCamera else { return }
+        reconnectTask = Task { [weak self] in
+            await self?.runReconnect(cam, generation: generation)
+        }
+    }
+
+    private func runReconnect(_ cam: NikonCamera, generation: Int) async {
+        let policy = ReconnectPolicy.default
+        var lastError = "未知错误"
+        for attempt in 1...policy.maxAttempts {
+            guard generation == reconnectGeneration, !Task.isCancelled else { return }
+            status.state = .reconnecting(attempt: attempt, maxAttempts: policy.maxAttempts)
+            if let delay = policy.delay(beforeAttempt: attempt) {
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                } catch {
+                    return
+                }
+            }
+            guard generation == reconnectGeneration, !Task.isCancelled else { return }
+            do {
+                try await cam.reconnect()
+                guard generation == reconnectGeneration else { return }
+                var recovered = cam.status
+                recovered.state = .recovered
+                recovered.notes = ["ICC 会话已恢复"]
+                status = recovered
+                liveViewStarted = false
+                lastLiveErrorText = ""
+                appendLog("ICC 会话已恢复", level: .info)
+                showToast("相机连接已恢复", kind: .success)
+                if let restore = pendingRestore {
+                    pendingRestore = nil
+                    try? await cam.apply(restore)
+                }
+                updateActivity()
+                reconnectTask = nil
+                refreshLiveLoop()
+                let token = generation
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    guard let self, token == self.reconnectGeneration,
+                          case .recovered = self.status.state else { return }
+                    self.status.state = .connected
+                }
+                return
+            } catch {
+                lastError = String(describing: error)
+                appendLog("重连失败 \(attempt)/\(policy.maxAttempts)：\(lastError)",
+                          level: .warning)
+            }
+        }
+        guard generation == reconnectGeneration else { return }
+        var failed = status
+        failed.state = .error("ICC 重连失败")
+        failed.notes = ["已停止重试：\(lastError)"]
+        status = failed
+        appendLog("ICC 重连失败，停止重试：\(lastError)", level: .error)
+        showToast("相机重连失败：\(lastError)", kind: .error)
+        reconnectTask = nil
+        updateActivity()
+    }
+
+    private func isSessionLoss(_ error: Error) -> Bool {
+        if let icc = error as? ICCError {
+            switch icc {
+            case .notConnected, .noCamera, .sessionFailed, .transport:
+                return true
+            default:
+                return false
+            }
+        }
+        if let camError = error as? CameraError, case .disconnected = camError {
+            return true
+        }
+        let text = String(describing: error).lowercased()
+        return text.contains("session not open")
+            || text.contains("no icc camera")
+            || text.contains("session failed")
+            || text.contains("transport error")
+    }
+
+    private func logLiveError(_ error: Error) {
+        let text = String(describing: error)
+        guard text != lastLiveErrorText
+                || Date().timeIntervalSince(lastLiveErrorAt) > 5 else { return }
+        lastLiveErrorText = text
+        lastLiveErrorAt = Date()
+        appendLog("取景错误：\(text)", level: .warning)
+    }
+
     // MARK: - Sequence
 
     func startSequence() {
-        guard let camera, runner == nil, !groupRunning else { return }
+        guard !findStarMode else {
+            showToast("先退出找星模式", kind: .warning)
+            return
+        }
+        guard let camera, runner == nil, !groupRunning, !focus.isRunning else { return }
+        beginSessionForNewRun()
         groupModeActive = false
         groupTotals = GroupTotals()
         qualityEngines.removeAll()
@@ -677,10 +1538,7 @@ final class AppModel: ObservableObject {
                 annotated.note = (record.note ?? "") + "，分组 \(group)"
                 annotated.qualityGroup = group
             }
-            addRecord(annotated)
-            if stack.enabled, annotated.analysisLuma != nil {
-                stackIfNeeded(annotated)
-            }
+            addRecord(annotated, role: .light)
             enqueueAnalysis(annotated)
         case .failed(let index, let message):
             appendLog("第 \(index + 1) 张失败：\(message)", level: .error)
@@ -692,7 +1550,12 @@ final class AppModel: ObservableObject {
     }
 
     func captureOnce() {
-        guard let camera, !isSingleShot, !isRunning else { return }
+        guard !findStarMode else {
+            showToast("先退出找星模式", kind: .warning)
+            return
+        }
+        guard let camera, !isSingleShot, !isRunning, !darkCollecting, !focus.isRunning else { return }
+        ensureSession()
         isSingleShot = true
         let settings = plan.settings
         Task {
@@ -701,7 +1564,7 @@ final class AppModel: ObservableObject {
                 try await camera.apply(settings)
                 sequenceCounter += 1
                 let record = try await camera.capture(sequence: sequenceCounter)
-                addRecord(record)
+                addRecord(record, role: .trial)
                 enqueueAnalysis(record)
                 appendLog("试拍完成：\(record.displayName)")
             } catch {
@@ -713,11 +1576,12 @@ final class AppModel: ObservableObject {
 
     // MARK: - Records & analysis
 
-    private func addRecord(_ record: ImageRecord) {
+    private func addRecord(_ record: ImageRecord, role: SessionRole = .light) {
         records.append(record)
         sequenceCounter = max(sequenceCounter, record.sequence)
         if !userPinnedSelection { selectedID = record.id }
         pruneLuma()
+        persistFrame(record, role: role)
         if monitorMode == .last { refreshAnalysisView() }
     }
 
@@ -730,21 +1594,35 @@ final class AppModel: ObservableObject {
 
     private func enqueueAnalysis(_ record: ImageRecord) {
         let prior = analysisChain
+        let library = darkLibrary
+        let darkEnabled = self.darkEnabled
         analysisChain = Task.detached(priority: .utility) { [weak self] in
             await prior?.value
             guard let self else { return }
             var updated = record
-            if updated.metrics == nil {
-                if let luma = updated.analysisLuma {
-                    updated.metrics = FrameAnalyzer.metrics(luma)
-                } else if let url = updated.fileURL,
-                          let luma = ImageLoader.luma(url: url, maxWidth: 2200) {
-                    updated.analysisLuma = luma
-                    updated.metrics = FrameAnalyzer.metrics(luma)
-                    if updated.preview == nil {
-                        updated.preview = ImageLoader.preview(url: url, maxWidth: 1800)
-                    }
+            var luma = updated.analysisLuma
+            if luma == nil, let url = updated.fileURL {
+                luma = ImageLoader.luma(url: url, maxWidth: 2200)
+                updated.analysisLuma = luma
+                if updated.preview == nil {
+                    updated.preview = ImageLoader.preview(url: url, maxWidth: 1800)
                 }
+            }
+            if updated.metrics == nil, let luma {
+                var working = luma
+                if darkEnabled,
+                   let meta = library.match(iso: record.settings.iso,
+                                            exposureSeconds: record.settings.exposureSeconds,
+                                            source: record.source,
+                                            width: luma.width, height: luma.height),
+                   let master = library.load(meta: meta) {
+                    working = DarkSubtraction.subtract(master, from: luma)
+                    updated.darkApplied = Self.darkLabel(meta)
+                    updated.preview = working.downsampled(maxWidth: 1200).displayImage()
+                    updated.thumbnail = working.downsampledMax(maxWidth: 140).displayImage()
+                }
+                updated.analysisLuma = working
+                updated.metrics = FrameAnalyzer.metrics(working)
             }
             if updated.thumbnail == nil, let luma = updated.analysisLuma {
                 updated.thumbnail = luma.downsampledMax(maxWidth: 140).displayImage()
@@ -755,12 +1633,24 @@ final class AppModel: ObservableObject {
         }
     }
 
+    nonisolated private static func darkLabel(_ meta: MasterDarkMeta) -> String {
+        String(format: "暗场 ISO %d / %@ / %d 帧", meta.iso,
+               CapturePlan.formatDuration(meta.exposureSeconds), meta.frameCount)
+    }
+
     private func finishAnalysis(_ record: ImageRecord) {
         guard let index = records.firstIndex(where: { $0.id == record.id }) else { return }
         records[index].metrics = record.metrics
-        records[index].preview = records[index].preview ?? record.preview
-        records[index].thumbnail = records[index].thumbnail ?? record.thumbnail
+        if record.darkApplied != nil {
+            // Dark-corrected preview replaces the raw filmstrip image.
+            records[index].preview = record.preview ?? records[index].preview
+            records[index].thumbnail = record.thumbnail ?? records[index].thumbnail
+        } else {
+            records[index].preview = records[index].preview ?? record.preview
+            records[index].thumbnail = records[index].thumbnail ?? record.thumbnail
+        }
         records[index].analysisLuma = record.analysisLuma ?? records[index].analysisLuma
+        records[index].darkApplied = record.darkApplied ?? records[index].darkApplied
         if let metrics = record.metrics {
             let key = record.qualityGroup ?? "default"
             var engine = qualityEngines[key] ?? QualityEngine()
@@ -805,6 +1695,7 @@ final class AppModel: ObservableObject {
         if selectedID == record.id {
             refreshAnalysisView()
         }
+        updateSidecar(for: records[index])
         stackIfNeeded(records[index])
     }
 
@@ -914,11 +1805,21 @@ final class AppModel: ObservableObject {
         let mode = analysisCrop
         let nativeWidth = record.width
         let nativeHeight = record.height
+        let library = darkLibrary
+        let darkEnabled = self.darkEnabled
         Task.detached(priority: .userInitiated) { [weak self] in
             var luma: LumaImage?
             var preview: CGImage?
             if mode == .full {
                 luma = ImageLoader.luma(url: url, maxWidth: 1600)
+                if let raw = luma, darkEnabled,
+                   let meta = library.match(iso: record.settings.iso,
+                                            exposureSeconds: record.settings.exposureSeconds,
+                                            source: record.source,
+                                            width: raw.width, height: raw.height),
+                   let master = library.load(meta: meta) {
+                    luma = DarkSubtraction.subtract(master, from: raw)
+                }
                 preview = ImageLoader.preview(url: url, maxWidth: 1600)
             } else {
                 let crop = AppModel.nativeCropRect(for: mode,
@@ -1033,6 +1934,10 @@ final class AppModel: ObservableObject {
     }
 
     func runAutoFocus() {
+        guard !findStarMode else {
+            showToast("退出找星模式后再运行自动对焦", kind: .warning)
+            return
+        }
         guard let camera, !focus.isRunning else { return }
         guard status.capabilities.contains(.manualFocusDrive) else {
             showToast("当前设备不支持电子对焦", kind: .warning)
@@ -1139,7 +2044,7 @@ final class AppModel: ObservableObject {
                 let record = try await camera.capture(sequence: sequenceCounter)
                 var verified = record
                 verified.note = (record.note ?? "") + "，对焦验证"
-                addRecord(verified)
+                addRecord(verified, role: .focusVerify)
                 enqueueAnalysis(verified)
             } catch {
                 appendLog("对焦验证拍摄失败：\(error)", level: .warning)
@@ -1152,7 +2057,7 @@ final class AppModel: ObservableObject {
     // MARK: - Focus bracket (S10-C)
 
     func runFocusBracket() {
-        guard let camera, !isRunning, !focusBracketRunning else { return }
+        guard let camera, !isRunning, !focusBracketRunning, !findStarMode else { return }
         guard status.state.isConnected,
               status.capabilities.contains(.manualFocusDrive) else {
             showToast("当前设备不支持电子对焦", kind: .warning)
@@ -1176,7 +2081,7 @@ final class AppModel: ObservableObject {
                     let record = try await camera.capture(sequence: sequenceCounter)
                     var annotated = record
                     annotated.note = (record.note ?? "") + String(format: "，焦点包围 %+d 步", offset)
-                    addRecord(annotated)
+                    addRecord(annotated, role: .focusBracket)
                     enqueueAnalysis(annotated)
                 }
                 if moved != 0 {
@@ -1211,8 +2116,13 @@ final class AppModel: ObservableObject {
     }
 
     private func runTrial(candidates: [(String, Double, Double?)], camera: CameraDevice) {
+        guard !findStarMode else {
+            showToast("先退出找星模式", kind: .warning)
+            return
+        }
         isTrialRunning = true
         trialCandidates = []
+        ensureSession()
         let original = plan.settings
         Task {
             defer { isTrialRunning = false }
@@ -1243,6 +2153,11 @@ final class AppModel: ObservableObject {
                                                    preview: record.preview,
                                                    note: "ISO \(settings.iso)")
                     trialCandidates.append(candidate)
+                    // Trial frames do not enter the filmstrip, but they are real
+                    // captures and get a session sidecar with their metrics.
+                    var persisted = record
+                    persisted.metrics = metrics
+                    persistFrame(persisted, role: .trial)
                 } catch {
                     appendLog("试拍 \(label) 失败：\(error)", level: .warning)
                 }
@@ -1385,12 +2300,13 @@ final class AppModel: ObservableObject {
     }
 
     func startGroupShoot() {
-        guard let camera, !isRunning else { return }
+        guard let camera, !isRunning, !findStarMode else { return }
         let runnable = groups.filter { $0.enabled }
         guard !runnable.isEmpty else {
             showToast("没有启用的分组", kind: .warning)
             return
         }
+        beginSessionForNewRun()
         groupRunning = true
         groupModeActive = true
         groupStopRequested = false
@@ -1468,6 +2384,505 @@ final class AppModel: ObservableObject {
 
     private func persistGroups() {
         presetStore.saveGroups(groups)
+    }
+
+    // MARK: - Star-field auto exposure
+
+    var canRunAutoExposure: Bool {
+        status.state.isConnected && !isRunning && !darkCollecting && !isSingleShot
+            && !focus.isRunning && !isTrialRunning && !focusBracketRunning
+            && !autoExposure.isRunning && !findStarMode
+    }
+
+    func runAutoExposure() {
+        guard let camera, canRunAutoExposure else {
+            showToast("当前状态不能运行自动曝光", kind: .warning)
+            return
+        }
+        let initial = plan.settings
+        let box = AutoFocusLengthBox(focalLengthMM: plan.focalLengthMM)
+        let cancel = autoCancel
+        cancel.clear()
+        autoExposure = AutoExposureUIState(isRunning: true, step: 0,
+                                           message: "准备", samples: [], result: nil)
+        suppressLive = true
+        liveTask?.cancel()
+        liveTask = nil
+        appendLog("星空自动曝光：开始")
+        let runner = AutoExposureRunner()
+        autoTask = Task { [weak self] in
+            guard let self else { return }
+            let probe: @Sendable (ExposureSettings) async throws -> AutoExposureSample = { settings in
+                if cancel.isSet { throw CameraError.unsupported("已取消") }
+                try await camera.apply(settings)
+                let record = try await camera.capture(sequence: box.nextSequence())
+                if box.focalLength == nil, let url = record.fileURL,
+                   let metadata = ImageLoader.metadata(url: url),
+                   let focal = metadata.focalLengthMM, focal > 0 {
+                    box.updateFocalLength(focal)
+                }
+                var luma = record.analysisLuma
+                if luma == nil, let url = record.fileURL {
+                    luma = ImageLoader.luma(url: url, maxWidth: 2200)
+                }
+                guard let luma else { throw CameraError.captureFailed("无像素") }
+                return AutoExposureSample(settings: settings,
+                                          metrics: FrameAnalyzer.metrics(luma),
+                                          maxValue: luma.maxValue)
+            }
+            let result = await runner.run(
+                initial: initial,
+                focalLengthMM: box.focalLength,
+                probe: probe,
+                onStep: { sample in
+                    await MainActor.run {
+                        self.autoExposure.samples.append(sample)
+                        self.autoExposure.step += 1
+                        self.autoExposure.message = String(
+                            format: "第 %d 步：ISO %d，%@，背景 %.0f，星点 %d，偏心 %.2f",
+                            self.autoExposure.step, sample.settings.iso,
+                            CapturePlan.formatDuration(sample.settings.exposureSeconds),
+                            sample.metrics.background, sample.metrics.starCount,
+                            sample.metrics.medianEccentricity)
+                    }
+                })
+            await MainActor.run {
+                self.finishAutoExposure(result, focalLength: box.focalLength)
+            }
+        }
+    }
+
+    func cancelAutoExposure() {
+        autoCancel.set()
+        autoExposure.message = "正在取消…"
+    }
+
+    private func finishAutoExposure(_ result: AutoExposureResult, focalLength: Double?) {
+        autoExposure.isRunning = false
+        autoExposure.result = result
+        autoExposure.message = result.message
+        if let focalLength { plan.focalLengthMM = focalLength }
+        if result.status.isRecommended {
+            plan.iso = result.settings.iso
+            plan.exposureSeconds = result.settings.exposureSeconds
+            if let aperture = result.settings.aperture { plan.aperture = aperture }
+            presetStore.saveLastPlan(plan)
+            appendLog("自动曝光已写回：\(result.message)")
+            showToast("自动曝光：ISO \(plan.iso) / \(CapturePlan.formatDuration(plan.exposureSeconds))",
+                      kind: .success)
+            if let camera {
+                Task { try? await camera.apply(result.settings) }
+            }
+        } else {
+            appendLog("自动曝光未确认：\(result.status.displayText)", level: .warning)
+            showToast("自动曝光未确认：\(result.status.displayText)", kind: .warning)
+        }
+        suppressLive = false
+        refreshLiveLoop()
+    }
+
+    // MARK: - Dark calibration
+
+    var canCollectDarks: Bool {
+        status.state.isConnected && sourceKind != .playback
+            && !isRunning && !darkCollecting && !isSingleShot
+            && !focus.isRunning && !isTrialRunning && !focusBracketRunning
+            && !findStarMode
+    }
+
+    var darkSummary: String {
+        guard let meta = darkMetas.first else { return "尚未采集" }
+        return String(format: "ISO %d / %@ / %d 帧", meta.iso,
+                      CapturePlan.formatDuration(meta.exposureSeconds), meta.frameCount)
+    }
+
+    func collectDarks() {
+        guard let camera, canCollectDarks else {
+            showToast("当前状态不能采集暗场", kind: .warning)
+            return
+        }
+        let settings = ExposureSettings(iso: plan.iso,
+                                        exposureSeconds: plan.exposureSeconds,
+                                        aperture: plan.aperture,
+                                        compression: .raw)
+        let target = max(1, min(32, darkTarget))
+        let source = imageSourceForSession
+        let runID = UUID()
+        let library = darkLibrary
+        darkRunID = runID
+        darkCollecting = true
+        darkProgress = 0
+        darkStatus = "准备"
+        suppressLive = true
+        liveTask?.cancel()
+        liveTask = nil
+        simulator?.setLensCovered(true)
+        appendLog("暗场采集：盖住镜头盖，\(target) 张，ISO \(settings.iso)，\(CapturePlan.formatDuration(settings.exposureSeconds))")
+        showToast("暗场采集：盖住镜头盖，\(target) 张", kind: .info)
+
+        Task { [weak self] in
+            guard let self else { return }
+            let accumulator = DarkAccumulator()
+            do {
+                try await camera.apply(settings)
+                for index in 0..<target {
+                    if self.darkRunID != runID { break }
+                    self.darkStatus = "曝光 \(index + 1)/\(target)"
+                    let record = try await camera.capture(sequence: -1000 - index)
+                    let luma: LumaImage?
+                    if let analysis = record.analysisLuma {
+                        luma = analysis
+                    } else if let url = record.fileURL {
+                        luma = ImageLoader.luma(url: url, maxWidth: 2200)
+                    } else {
+                        luma = nil
+                    }
+                    guard let luma else { throw CameraError.downloadFailed("暗场帧无像素") }
+                    try accumulator.add(luma, settings: settings)
+                    self.darkProgress = index + 1
+                }
+                // Median/MAD over a full frame is O(n log n); keep it off the
+                // main actor together with the master write.
+                let saved = try await Task.detached(priority: .userInitiated) {
+                    guard let master = accumulator.build(settings: settings, source: source) else {
+                        throw CameraError.captureFailed("暗场累加失败")
+                    }
+                    return try library.save(master)
+                }.value
+                self.darkMetas = library.all()
+                if saved.isUsable {
+                    self.darkEnabled = true
+                    self.darkStatus = String(format: "完成：ISO %d / %@ / %d 帧", saved.iso,
+                                             CapturePlan.formatDuration(saved.exposureSeconds),
+                                             saved.frameCount)
+                    self.appendLog("暗场库新增：\(self.darkStatus)")
+                    self.showToast("暗场完成（\(saved.frameCount) 帧）", kind: .success)
+                } else {
+                    self.darkEnabled = false
+                    self.darkStatus = String(format: "分布异常：ISO %d / %@ / %d 帧，未启用",
+                                             saved.iso,
+                                             CapturePlan.formatDuration(saved.exposureSeconds),
+                                             saved.frameCount)
+                    self.appendLog("暗场分布异常，未启用：Core Image 解码的 NEF 暗场不可靠",
+                                   level: .warning)
+                    self.showToast("暗场已保存但分布异常，未启用", kind: .warning)
+                }
+                self.resetQualityAfterDarkChange()
+            } catch {
+                self.darkStatus = "失败"
+                self.appendLog("暗场采集失败：\(error)", level: .error)
+                self.showToast("暗场采集失败：\(error)", kind: .error)
+            }
+            self.simulator?.setLensCovered(false)
+            try? await camera.apply(self.plan.settings)
+            self.darkCollecting = false
+            self.darkRunID = nil
+            self.suppressLive = false
+            self.refreshLiveLoop()
+        }
+    }
+
+    func setDarkEnabled(_ enabled: Bool) {
+        guard darkEnabled != enabled else { return }
+        darkEnabled = enabled
+        resetQualityAfterDarkChange()
+        appendLog(enabled ? "暗场减除已启用" : "暗场减除已关闭")
+    }
+
+    func refreshDarks() {
+        darkMetas = darkLibrary.all()
+    }
+
+    func deleteDark(_ meta: MasterDarkMeta) {
+        guard darkLibrary.delete(id: meta.id) else { return }
+        darkMetas = darkLibrary.all()
+        appendLog("已删除暗场 ISO \(meta.iso) / \(CapturePlan.formatDuration(meta.exposureSeconds))")
+    }
+
+    private func resetQualityAfterDarkChange() {
+        qualityEngines.removeAll()
+        qualityTimeline.removeAll()
+        quality.qualified = 0
+    }
+
+    private var imageSourceForSession: ImageSource {
+        switch sourceKind {
+        case .simulator: return .simulator
+        case .playback: return .playback
+        case .nikon: return .nikon
+        }
+    }
+
+    // MARK: - Camera screen
+
+    var canControlCameraScreen: Bool {
+        status.state.isConnected && status.capabilities.contains(.monitorControl)
+    }
+
+    func setCameraScreen(off: Bool) {
+        guard let camera, canControlCameraScreen else {
+            showToast("当前设备不支持关屏控制", kind: .warning)
+            return
+        }
+        Task {
+            do {
+                try await camera.setScreen(on: !off)
+                cameraScreenOff = off
+                appendLog(off ? "已请求关闭相机屏" : "已请求打开相机屏")
+                showToast(off ? "已请求关屏" : "已请求开屏", kind: .info)
+            } catch {
+                appendLog("相机屏控制失败：\(error)", level: .warning)
+                showToast("相机屏控制失败：\(error)", kind: .error)
+            }
+        }
+    }
+
+    // MARK: - Session
+
+    var canExportStack: Bool {
+        guard sessionInfo != nil else { return false }
+        if stack.mode == .trails { return trailStacker != nil }
+        return stacker != nil
+    }
+
+    var canStackSession: Bool {
+        sessionInfo != nil && sessionFrameCount >= 2 && !sessionStack.isRunning
+            && !isRunning && !darkCollecting && !autoExposure.isRunning
+    }
+
+    private func beginSessionForNewRun() {
+        do {
+            let info = try sessionStore.beginSession()
+            sessionInfo = info
+            sidecarByFrameID.removeAll()
+            sessionFrameCount = 0
+            appendLog("会话目录：\(info.directory.path)")
+        } catch {
+            sessionInfo = nil
+            sidecarByFrameID.removeAll()
+            sessionFrameCount = 0
+            appendLog("会话目录创建失败：\(error)", level: .error)
+            showToast("会话目录创建失败，照片不会写入会话", kind: .error)
+        }
+    }
+
+    private func ensureSession() {
+        if sessionInfo == nil { beginSessionForNewRun() }
+    }
+
+    private func persistFrame(_ record: ImageRecord, role: SessionRole) {
+        guard let session = sessionInfo else { return }
+        var sidecar = FrameSidecar(frameID: record.id,
+                                   sessionID: session.id,
+                                   sequence: record.sequence,
+                                   timestamp: record.timestamp,
+                                   role: role,
+                                   source: record.source,
+                                   originalPath: record.fileURL?.path,
+                                   settings: record.settings,
+                                   width: record.width,
+                                   height: record.height,
+                                   metrics: record.metrics.map { MetricsSnapshot($0) },
+                                   verdict: record.verdict.map { VerdictSnapshot($0) },
+                                   qualityGroup: record.qualityGroup,
+                                   note: record.note,
+                                   darkApplied: record.darkApplied != nil)
+        let luma = record.analysisLuma
+        let isSimulator = record.source == .simulator
+        let store = sessionStore
+        let frameID = record.id
+        sidecarByFrameID[record.id] = sidecar
+        enqueueSessionWrite { [weak self] in
+            let written: FrameSidecar
+            if isSimulator, let luma {
+                written = try store.writeTIFFFrame(luma, sidecar: sidecar)
+            } else {
+                try store.writeSidecar(sidecar)
+                written = sidecar
+            }
+            await MainActor.run {
+                guard let self else { return }
+                self.sidecarByFrameID[frameID] = written
+                self.sessionFrameCount += 1
+            }
+        }
+    }
+
+    private func updateSidecar(for record: ImageRecord) {
+        guard var sidecar = sidecarByFrameID[record.id] else { return }
+        sidecar.metrics = record.metrics.map { MetricsSnapshot($0) }
+        sidecar.verdict = record.verdict.map { VerdictSnapshot($0) }
+        sidecar.qualityGroup = record.qualityGroup
+        sidecar.note = record.note
+        sidecar.darkApplied = record.darkApplied != nil
+        sidecar.width = record.width
+        sidecar.height = record.height
+        sidecarByFrameID[record.id] = sidecar
+        let store = sessionStore
+        enqueueSessionWrite {
+            try store.writeSidecar(sidecar)
+        }
+    }
+
+    private func enqueueSessionWrite(_ operation: @escaping @Sendable () async throws -> Void) {
+        let prior = sessionWriteChain
+        sessionWriteChain = Task.detached(priority: .utility) { [weak self] in
+            await prior?.value
+            do {
+                try await operation()
+            } catch {
+                await MainActor.run {
+                    self?.appendLog("会话写入失败：\(error)", level: .warning)
+                }
+            }
+        }
+    }
+
+    func exportStackImage() {
+        guard sessionInfo != nil else {
+            showToast("先开始一次拍摄", kind: .warning)
+            return
+        }
+        let image: LumaImage?
+        if stack.mode == .trails {
+            image = trailStacker?.current()
+        } else {
+            image = stacker?.currentMean()
+        }
+        guard let image else {
+            showToast("没有可导出的叠加", kind: .warning)
+            return
+        }
+        let name = stack.mode == .trails ? "stack-trails" : "stack-mean"
+        let isTrails = stack.mode == .trails
+        let store = sessionStore
+        enqueueSessionWrite { [weak self] in
+            let urls = try store.exportStack(image, name: name)
+            await MainActor.run {
+                guard let self else { return }
+                self.sessionLastExport = urls.tiff
+                self.appendLog("已导出\(isTrails ? "星轨" : "叠加")：\(urls.tiff.lastPathComponent)")
+                self.showToast("已导出 \(urls.tiff.lastPathComponent)", kind: .success)
+            }
+        }
+    }
+
+    func exportSessionReport() {
+        guard sessionInfo != nil else {
+            showToast("先开始一次拍摄", kind: .warning)
+            return
+        }
+        let store = sessionStore
+        enqueueSessionWrite { [weak self] in
+            let urls = try store.writeReport()
+            await MainActor.run {
+                guard let self else { return }
+                self.sessionLastExport = urls.json
+                self.appendLog("会话报告：\(urls.json.lastPathComponent)")
+                self.showToast("报告已写入会话目录", kind: .success)
+            }
+        }
+    }
+
+    func revealSession() {
+        guard let directory = sessionInfo?.directory else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([directory])
+    }
+
+    /// Star-align every light frame in the current session, average them, and
+    /// export the result as auto-stack.tif/png.
+    func stackSession() {
+        guard let session = sessionInfo else {
+            showToast("先开始一次拍摄", kind: .warning)
+            return
+        }
+        guard canStackSession else { return }
+        let store = sessionStore
+        let directory = session.directory
+        let library = darkLibrary
+        let darkEnabled = self.darkEnabled
+        sessionStack = SessionStackUIState(isRunning: true, processed: 0, total: 0,
+                                           message: "读取会话…")
+        appendLog("自动叠加：读取会话 \(session.name)")
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let frames = store.frames(in: directory).filter { $0.role == .light }
+            guard frames.count >= 2 else {
+                await MainActor.run {
+                    self?.finishStack(error: "会话中的 light 帧不足（\(frames.count)）")
+                }
+                return
+            }
+            await MainActor.run {
+                self?.sessionStack.total = frames.count
+                self?.sessionStack.message = "解码 0/\(frames.count)"
+            }
+            let stacker = SessionStacker(maxWidth: 2_000)
+            var processed = 0
+            var decodeFailures = 0
+            for sidecar in frames {
+                let url: URL?
+                if let name = sidecar.fileName {
+                    url = directory.appendingPathComponent(name)
+                } else if let path = sidecar.originalPath {
+                    url = URL(fileURLWithPath: path)
+                } else {
+                    url = nil
+                }
+                if let url, var luma = ImageLoader.luma(url: url, maxWidth: 2_000) {
+                    if darkEnabled,
+                       let meta = library.match(iso: sidecar.settings.iso,
+                                                exposureSeconds: sidecar.settings.exposureSeconds,
+                                                source: sidecar.source,
+                                                width: luma.width, height: luma.height),
+                       let master = library.load(meta: meta) {
+                        luma = DarkSubtraction.subtract(master, from: luma)
+                    }
+                    stacker.add(luma)
+                } else {
+                    decodeFailures += 1
+                }
+                processed += 1
+                await MainActor.run {
+                    self?.sessionStack.processed = processed
+                    self?.sessionStack.message = "解码 \(processed)/\(frames.count)"
+                }
+            }
+            guard let result = stacker.result() else {
+                await MainActor.run { self?.finishStack(error: "没有可叠加的帧") }
+                return
+            }
+            do {
+                let urls = try store.exportStack(result.image, name: "auto-stack")
+                await MainActor.run {
+                    guard let self else { return }
+                    self.sessionStack.isRunning = false
+                    self.sessionStack.summary = result.summary
+                    self.sessionStack.exportURL = urls.tiff
+                    var message = String(format: "叠加 %d 张，拒绝 %d 张，覆盖 %.0f%%",
+                                         result.summary.accepted,
+                                         result.summary.rejected,
+                                         result.summary.coverage * 100)
+                    if decodeFailures > 0 {
+                        message += "，解码失败 \(decodeFailures)"
+                    }
+                    if !result.summary.reasonText.isEmpty {
+                        message += "（\(result.summary.reasonText)）"
+                    }
+                    self.sessionStack.message = message
+                    self.appendLog("自动叠加：\(message)")
+                    self.showToast("已导出 \(urls.tiff.lastPathComponent)", kind: .success)
+                }
+            } catch {
+                await MainActor.run { self?.finishStack(error: "导出失败：\(error)") }
+            }
+        }
+    }
+
+    private func finishStack(error: String) {
+        sessionStack.isRunning = false
+        sessionStack.message = error
+        appendLog("自动叠加失败：\(error)", level: .warning)
+        showToast("自动叠加失败：\(error)", kind: .warning)
     }
 
     // MARK: - Presets

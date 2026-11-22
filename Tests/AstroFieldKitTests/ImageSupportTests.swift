@@ -169,6 +169,15 @@ final class ImageSupportTests: XCTestCase {
         XCTAssertEqual(loaded.first?.trials.first?.medianFWHM, 2.4)
     }
 
+    func testCenterCropZoomFactors() {
+        let image = starImage(width: 200, height: 120, stars: [(100, 60, 9000, 2)])
+        guard let cg = image.displayImage() else { return XCTFail("no CGImage") }
+        XCTAssertEqual(ImageCrop.centerCrop(cg, zoom: 1)?.width, 200)
+        XCTAssertEqual(ImageCrop.centerCrop(cg, zoom: 2)?.width, 100)
+        XCTAssertEqual(ImageCrop.centerCrop(cg, zoom: 2)?.height, 60)
+        XCTAssertEqual(ImageCrop.centerCrop(cg, zoom: 4)?.width, 50)
+    }
+
     func testStarTrailAccumulatorMaxBlendAndGaps() {
         var first = [Float](repeating: 100, count: 100 * 80)
         first[20 * 100 + 30] = 50000

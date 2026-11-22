@@ -12,6 +12,29 @@ if let nikonHeaders {
 let sdkDependencies: [Target.Dependency] = sdkEnabled ? ["CNikonMAID"] : []
 let sdkSettings: [SwiftSetting] = sdkEnabled ? [.define("ASTROFIELD_NIKON_SDK")] : []
 
+// LibRaw is optional: when the headers are found (Homebrew default or
+// LIBRAW_PREFIX) the linear RAW decoder is compiled into AstroFieldKit.
+let librawPrefix = ProcessInfo.processInfo.environment["LIBRAW_PREFIX"]
+    ?? "/opt/homebrew/opt/libraw"
+let librawEnabled = FileManager.default.fileExists(
+    atPath: librawPrefix + "/include/libraw/libraw.h")
+let librawDependencies: [Target.Dependency] = librawEnabled ? ["CLibRaw"] : []
+let librawSettings: [SwiftSetting] = librawEnabled ? [.define("ASTROFIELD_LIBRAW")] : []
+let librawTargets: [Target] = librawEnabled ? [
+    .target(
+        name: "CLibRaw",
+        path: "Sources/CLibRaw",
+        publicHeadersPath: "include",
+        cxxSettings: [
+            .unsafeFlags(["-I", librawPrefix + "/include"])
+        ],
+        linkerSettings: [
+            .unsafeFlags(["-L", librawPrefix + "/lib", "-lraw"]),
+            .linkedLibrary("c++")
+        ]
+    )
+] : []
+
 let package = Package(
     name: "AstroField",
     platforms: [.macOS(.v14)],
@@ -34,7 +57,7 @@ let package = Package(
                 .linkedFramework("ImageCaptureCore")
             ]
         )
-    ] : []) + [
+    ] : []) + librawTargets + [
         .target(
             name: "AFSpikeCore",
             dependencies: sdkDependencies,
@@ -43,8 +66,9 @@ let package = Package(
         ),
         .target(
             name: "AstroFieldKit",
-            dependencies: ["AFSpikeCore"],
-            path: "Sources/AstroFieldKit"
+            dependencies: ["AFSpikeCore"] + librawDependencies,
+            path: "Sources/AstroFieldKit",
+            swiftSettings: librawSettings
         ),
         .executableTarget(
             name: "AstroField",

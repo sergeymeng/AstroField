@@ -44,8 +44,48 @@ public struct SimulatorScene: Sendable {
     public var lightPollution: Double = 0.18
     public var condition: SkyCondition = .clear
     public var liveWidth = 1024
+    /// Lens cap state. Covered frames contain no stars, no condition lighting
+    /// and no light-pollution gradient; only the bias/dark-current background
+    /// and fixed-pattern hot pixels remain, which is what a master dark needs.
+    public var lensCovered = false
+    /// Number of fixed-pattern hot pixels written into every rendered frame.
+    public var configuredHotPixels = 12
+    /// Bias/dark-current level in ADU at ISO 800. A lens-covered frame contains
+    /// only this level plus hot pixels, so subtracting a master dark removes it
+    /// while the sky background of a normal frame remains.
+    public var biasADU: Double = 300
+    /// Extra additive dark-current offset in ADU applied to every frame. It is
+    /// independent of aperture and exposure; keep it well below ~720 ADU so a
+    /// long exposure still more than doubles a short one.
+    public var darkCurrentADU: Double = 0
 
     public init() {}
+
+    /// Fixed-pattern hot pixels for a render of `width` × `height`.
+    ///
+    /// Positions are generated in normalized sensor coordinates from `seed`
+    /// only, so they are identical in normal and lens-covered frames, across
+    /// `seedOffset` and time, and scale with the render size.
+    public func hotPixels(width: Int, height: Int) -> [SimulatedHotPixel] {
+        guard configuredHotPixels > 0, width > 1, height > 1 else { return [] }
+        // "HotPixel" as the XOR constant keeps this stream independent of stars.
+        var rng = SeededRandom(seed: seed ^ 0x486F_7450_6978_656C)
+        var seen = Set<Int>()
+        var out: [SimulatedHotPixel] = []
+        out.reserveCapacity(configuredHotPixels)
+        var attempts = 0
+        while out.count < configuredHotPixels && attempts < configuredHotPixels * 8 {
+            attempts += 1
+            let u = rng.uniform()
+            let v = rng.uniform()
+            let x = min(width - 1, Int(u * Double(width)))
+            let y = min(height - 1, Int(v * Double(height)))
+            if !seen.insert(y * width + x).inserted { continue }
+            let strength = 1.5 + rng.uniform() * 1.5
+            out.append(SimulatedHotPixel(x: x, y: y, scale: strength))
+        }
+        return out
+    }
 
     public func stars() -> [SimulatedStar] {
         var rng = SeededRandom(seed: seed)
@@ -64,6 +104,22 @@ public struct SimulatorScene: Sendable {
     }
 }
 
+/// One fixed-pattern hot pixel produced by `SimulatorScene.hotPixels(width:height:)`.
+public struct SimulatedHotPixel: Sendable, Equatable {
+    /// Pixel column in the requested render size.
+    public var x: Int
+    /// Pixel row in the requested render size.
+    public var y: Int
+    /// Strength multiplier applied to the base hot-pixel level.
+    public var scale: Double
+
+    public init(x: Int, y: Int, scale: Double) {
+        self.x = x
+        self.y = y
+        self.scale = scale
+    }
+}
+
 /// Deterministic renderer for the simulated sky. All output is explicitly synthetic.
 public final class SimulatorSky: @unchecked Sendable {
     public var scene: SimulatorScene
@@ -79,6 +135,11 @@ public final class SimulatorSky: @unchecked Sendable {
     ///   - focusSigma: PSF sigma in full-resolution pixels.
     ///   - timeSeconds: simulated elapsed time since session start (drives drift).
     ///   - width/height: output size; normalized coordinates keep the same field of view.
+    /// - Note: When `scene.lensCovered` is true the frame contains no stars and
+    ///   no external light (condition terms and light pollution are skipped);
+    ///   only the bias/dark-current background and fixed-pattern hot pixels
+    ///   remain. Hot pixels are always single pixels and appear in normal and
+    ///   covered frames at the same sensor sites.
     public func render(settings: ExposureSettings,
                        focusSigma: Double,
                        timeSeconds: Double,
@@ -93,8 +154,11 @@ public final class SimulatorSky: @unchecked Sendable {
         let apertureFactor = pow(2.8 / max(aperture, 1.0), 2)
         let isoFactor = Double(max(settings.iso, 50)) / 800.0
         let gain = exposure * apertureFactor * isoFactor
+        // Dark current and fixed-pattern hot pixels are sensor-level and do not
+        // depend on the aperture, so they use their own aperture-free gain.
+        let darkGain = exposure * isoFactor
 
-        var background = scene.background * gain
+        var background = scene.background * gain + scene.biasADU * isoFactor
         var starGain = gain
         var extraSigma: Double = 0
         var activeStars = stars
@@ -120,9 +184,21 @@ public final class SimulatorSky: @unchecked Sendable {
             }
         }
 
+        if scene.lensCovered {
+            // Lens cap on: no external light reaches the sensor. Only the
+            // bias/dark-current level remains (independent of exposure time and
+            // aperture), which is exactly what a master dark removes.
+            background = scene.biasADU * isoFactor
+            activeStars = []
+            extraSigma = 0
+        }
+        background += scene.darkCurrentADU
+
         var pixels = [Float](repeating: 0, count: width * height)
         for y in 0..<height {
-            let pollution = 1.0 + scene.lightPollution * (Double(y) / Double(height) - 0.5)
+            let pollution = scene.lensCovered
+                ? 1.0
+                : 1.0 + scene.lightPollution * (Double(y) / Double(height) - 0.5)
             let value = Float(background * pollution)
             let row = y * width
             for x in 0..<width { pixels[row + x] = value }
@@ -171,6 +247,16 @@ public final class SimulatorSky: @unchecked Sendable {
                     let value = peak * exp(-(u * u * invMaj + v * v * invMin))
                     pixels[py * width + px] += Float(value)
                 }
+            }
+        }
+
+        // Fixed-pattern hot pixels: sensor-level single pixels, independent of
+        // aperture and condition. Written before the obstruction mask so
+        // foreground objects cover them like everything else.
+        let hotLevel = 2600.0 * darkGain * scale
+        if hotLevel > 0 {
+            for hotPixel in scene.hotPixels(width: width, height: height) {
+                pixels[hotPixel.y * width + hotPixel.x] += Float(hotLevel * hotPixel.scale)
             }
         }
 

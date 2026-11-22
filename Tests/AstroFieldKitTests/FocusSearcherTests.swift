@@ -64,6 +64,14 @@ final class FocusSearcherTests: XCTestCase {
         XCTAssertTrue(result.message.contains("星点不足"))
     }
 
+    func testAlreadyInFocusIsConfirmed() async {
+        let probe = CurveProbe(best: 0)
+        let result = await FocusSearcher().run(probe: probe, config: .init())
+        XCTAssertEqual(result.status, .confirmed, result.message)
+        XCTAssertEqual(result.bestRelativeSteps ?? -1, 0)
+        XCTAssertTrue(result.message.contains("已在对焦位置"), result.message)
+    }
+
     func testCancellation() async {
         let counter = CallCounter()
         let probe = CurveProbe(best: 300)

@@ -10,6 +10,32 @@ public struct DetectedStar: Sendable, Equatable {
     public var saturated: Bool
 }
 
+/// Pixel-integrated Gaussian PSF fit for one star.
+///
+/// The model integrates the Gaussian over each pixel instead of sampling its
+/// centre, which removes most of the systematic FWHM bias for the 1–2 px stars
+/// seen on undersampled wide-field frames.
+public struct PSFFit: Sendable, Equatable {
+    public var x: Double
+    public var y: Double
+    public var sigma: Double
+    public var fwhm: Double
+    public var peak: Double
+    public var background: Double
+    public var residual: Double
+
+    public init(x: Double, y: Double, sigma: Double, peak: Double,
+                background: Double, residual: Double) {
+        self.x = x
+        self.y = y
+        self.sigma = sigma
+        self.fwhm = 2.3548 * sigma
+        self.peak = peak
+        self.background = background
+        self.residual = residual
+    }
+}
+
 public struct FocusMeasurement: Sendable, Equatable {
     public var medianFWHM: Double
     public var starCount: Int
@@ -107,6 +133,133 @@ public enum StarDetector {
         return Array(stars.prefix(maxStars))
     }
 
+    /// Pixel-integrated Gaussian fit around one star.
+    ///
+    /// Fits `background + peak · Ix(σ) · Iy(σ)` where `Ix`/`Iy` are the Gaussian
+    /// integrated over each pixel. This removes most of the FWHM bias of a
+    /// centre-sampled second-moment estimate on undersampled stars.
+    public static func fitPSF(in image: LumaImage, x: Double, y: Double,
+                              radius: Int = 4) -> PSFFit? {
+        let width = image.width
+        let height = image.height
+        let cx = Int(x.rounded())
+        let cy = Int(y.rounded())
+        let x0 = max(1, cx - radius)
+        let x1 = min(width - 2, cx + radius)
+        let y0 = max(1, cy - radius)
+        let y1 = min(height - 2, cy + radius)
+        guard x1 - x0 >= 4, y1 - y0 >= 4 else { return nil }
+
+        var edge: [Float] = []
+        edge.reserveCapacity(4 * (x1 - x0 + y1 - y0 + 2))
+        for yy in y0...y1 {
+            edge.append(image.pixels[yy * width + x0])
+            edge.append(image.pixels[yy * width + x1])
+        }
+        for xx in x0...x1 {
+            edge.append(image.pixels[y0 * width + xx])
+            edge.append(image.pixels[y1 * width + xx])
+        }
+        edge.sort()
+        let background0 = Double(edge[edge.count / 2])
+
+        var sw = 0.0, sx = 0.0, sy = 0.0, sxx = 0.0, syy = 0.0
+        for yy in y0...y1 {
+            let row = yy * width
+            for xx in x0...x1 {
+                let value = Double(image.pixels[row + xx]) - background0
+                if value <= 0 { continue }
+                let dx = Double(xx)
+                let dy = Double(yy)
+                sw += value
+                sx += value * dx
+                sy += value * dy
+                sxx += value * dx * dx
+                syy += value * dy * dy
+            }
+        }
+        guard sw > 0 else { return nil }
+        let mx = sx / sw
+        let my = sy / sw
+        let varX = max(0.01, sxx / sw - mx * mx)
+        let varY = max(0.01, syy / sw - my * my)
+        let sigma0 = max(0.4, min(3.5, sqrt((varX + varY) / 2)))
+
+        var values = [Double](repeating: 0, count: (x1 - x0 + 1) * (y1 - y0 + 1))
+        var index = 0
+        for yy in y0...y1 {
+            let row = yy * width
+            for xx in x0...x1 {
+                values[index] = Double(image.pixels[row + xx])
+                index += 1
+            }
+        }
+
+        func fitAt(sigma: Double) -> (sse: Double, peak: Double, bg: Double) {
+            let inv = 1.0 / (sqrt(2.0) * sigma)
+            var basis = [Double](repeating: 0, count: values.count)
+            var i = 0
+            for yy in y0...y1 {
+                let iy = 0.5 * (erf((Double(yy) + 0.5 - my) * inv)
+                                - erf((Double(yy) - 0.5 - my) * inv))
+                for xx in x0...x1 {
+                    let ix = 0.5 * (erf((Double(xx) + 0.5 - mx) * inv)
+                                    - erf((Double(xx) - 0.5 - mx) * inv))
+                    basis[i] = ix * iy
+                    i += 1
+                }
+            }
+            let n = Double(basis.count)
+            var sb = 0.0, sbb = 0.0, sy = 0.0, sby = 0.0
+            for i in basis.indices {
+                let b = basis[i]
+                let y = values[i]
+                sb += b
+                sbb += b * b
+                sy += y
+                sby += b * y
+            }
+            let det = n * sbb - sb * sb
+            guard abs(det) > 1e-12 else { return (1e30, 0, background0) }
+            let peak = (n * sby - sb * sy) / det
+            let bg = (sy * sbb - sb * sby) / det
+            var sse = 0.0
+            for i in basis.indices {
+                let model = bg + peak * basis[i]
+                let d = values[i] - model
+                sse += d * d
+            }
+            return (sse, peak, bg)
+        }
+
+        var lo = max(0.3, sigma0 * 0.5)
+        var hi = min(4.0, sigma0 * 2.0)
+        if hi <= lo { hi = lo + 0.2 }
+        let phi = (sqrt(5.0) - 1) / 2
+        var a = lo, b = hi
+        var c = b - phi * (b - a)
+        var d = a + phi * (b - a)
+        var fc = fitAt(sigma: c).sse
+        var fd = fitAt(sigma: d).sse
+        for _ in 0..<16 {
+            if fc < fd {
+                b = d; d = c; fd = fc
+                c = b - phi * (b - a)
+                fc = fitAt(sigma: c).sse
+            } else {
+                a = c; c = d; fc = fd
+                d = a + phi * (b - a)
+                fd = fitAt(sigma: d).sse
+            }
+        }
+        let sigma = (a + b) / 2
+        let fit = fitAt(sigma: sigma)
+        guard fit.peak > 0 else { return nil }
+        let count = Double(values.count)
+        return PSFFit(x: mx, y: my, sigma: sigma, peak: fit.peak,
+                      background: fit.bg, residual: sqrt(max(0, fit.sse / count)))
+    }
+
     /// Measure the median FWHM of unsaturated stars inside an optional normalized region.
     public static func measure(in image: LumaImage, region: CGRect? = nil) -> FocusMeasurement {
         var cropped = image
@@ -125,8 +278,17 @@ public enum StarDetector {
         guard !usable.isEmpty else {
             return FocusMeasurement(medianFWHM: 0, starCount: 0, medianEccentricity: 0)
         }
-        let fwhms = usable.map { $0.fwhm }.sorted()
+        var fwhms: [Double] = []
+        fwhms.reserveCapacity(usable.count)
+        for star in usable.prefix(60) {
+            if let fit = fitPSF(in: cropped, x: star.x, y: star.y) {
+                fwhms.append(fit.fwhm)
+            } else {
+                fwhms.append(star.fwhm)
+            }
+        }
         let eccs = usable.map { $0.eccentricity }.sorted()
+        fwhms.sort()
         return FocusMeasurement(medianFWHM: median(fwhms),
                                 starCount: usable.count,
                                 medianEccentricity: median(eccs))

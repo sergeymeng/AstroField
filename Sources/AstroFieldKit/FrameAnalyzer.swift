@@ -27,8 +27,13 @@ public enum FrameAnalyzer {
 
         let stars = StarDetector.detect(in: image)
         let usable = stars.filter { !$0.saturated }
-        let fwhms = usable.map { $0.fwhm }.sorted()
-        let eccentricities = usable.map { $0.eccentricity }.sorted()
+        // Pixel-integrated fits remove the undersampling bias of second moments
+        // for the brightest stars, at a bounded cost per frame.
+        let sample = Array(usable.prefix(40))
+        let fwhms = sample.map {
+            StarDetector.fitPSF(in: image, x: $0.x, y: $0.y)?.fwhm ?? $0.fwhm
+        }.sorted()
+        let eccentricities = sample.map { $0.eccentricity }.sorted()
 
         return FrameMetrics(starCount: usable.count,
                             background: background,

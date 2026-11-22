@@ -26,12 +26,16 @@ xcuserdata/
 /docs/*
 !/docs/ARCHITECTURE.md
 !/docs/DEVELOPMENT.md
+!/docs/Z7II_APP_ACCEPTANCE.md
 !/docs/screenshots/
 /docs/screenshots/*
 !/docs/screenshots/01-idle.png
 !/docs/screenshots/03-focus.png
 !/docs/screenshots/05-corners.png
 !/docs/screenshots/06-stack.png
+!/docs/screenshots/19-dark.png
+!/docs/screenshots/20-session.png
+!/docs/screenshots/23-findstar.png
 
 # Local configuration and credentials
 .env

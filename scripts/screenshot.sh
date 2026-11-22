@@ -5,10 +5,17 @@ cd "$(dirname "$0")/.."
 BIN=$(swift build --show-bin-path)/AstroField
 OUT=docs/screenshots
 mkdir -p "$OUT"
+# Demo sessions and darks stay inside the repo; never touch ~/Pictures here.
+DEMO_SESSION="$PWD/logs/demo-session"
+DEMO_DARK="$PWD/logs/demo-darks"
+rm -rf "$DEMO_SESSION" "$DEMO_DARK"
+mkdir -p "$DEMO_SESSION" "$DEMO_DARK"
 
 shoot() {
   local name="$1" demo="$2" delay="$3"
-  ASTROFIELD_DEMO="$demo" ASTROFIELD_SHOT_PATH="$OUT/$name.png" \
+  ASTROFIELD_DEMO="$demo" ASTROFIELD_SESSION_ROOT="$DEMO_SESSION" \
+    ASTROFIELD_DARK_DIR="$DEMO_DARK" \
+    ASTROFIELD_SHOT_PATH="$OUT/$name.png" \
     ASTROFIELD_SHOT_DELAY="$delay" ASTROFIELD_SHOT_EXIT=1 "$BIN" >/dev/null 2>&1
   echo "$OUT/$name.png"
 }
@@ -26,6 +33,12 @@ shoot 14-integration integration 13
 shoot 15-focus-bracket focusbracket 9
 shoot 16-trails trails 9
 shoot 17-groups groups 8
+shoot 18-live-assist focusassist 6
+shoot 23-findstar findstar 8
+shoot 19-dark dark 18
+shoot 20-session fullchain 40
+shoot 21-auto auto 30
+shoot 22-autostack autostack 30
 
 ASTROFIELD_DEMO=idle ASTROFIELD_WINDOW_SIZE=1180x760 \
   ASTROFIELD_SHOT_PATH="$OUT/12-small-window.png" ASTROFIELD_SHOT_DELAY=5 \
@@ -42,6 +55,7 @@ echo "$OUT/10-night.png"
 
 if [ -d "logs/hw-z7ii/bulb" ]; then
   ASTROFIELD_PLAYBACK_DIR="$PWD/logs/hw-z7ii/bulb" ASTROFIELD_DEMO=analysis \
+    ASTROFIELD_SESSION_ROOT="$DEMO_SESSION" ASTROFIELD_DARK_DIR="$DEMO_DARK" \
     ASTROFIELD_SHOT_PATH="$OUT/11-nef-playback.png" ASTROFIELD_SHOT_DELAY=9 \
     ASTROFIELD_SHOT_EXIT=1 "$BIN" >/dev/null 2>&1
   echo "$OUT/11-nef-playback.png"

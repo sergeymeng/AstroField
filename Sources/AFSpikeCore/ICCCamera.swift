@@ -146,11 +146,13 @@ public final class ICCCamera: NSObject, ICDeviceBrowserDelegate, ICDeviceDelegat
 
     /// Start the device browser and wait until a camera shows up.
     public func start(timeout: TimeInterval = 10) throws {
-        if withLock({ browserRunning }) { return }
-        browser.delegate = self
-        browser.browsedDeviceTypeMask = .camera
-        browser.start()
-        withLock { browserRunning = true }
+        if withLock({ browserRunning && device != nil }) { return }
+        if !withLock({ browserRunning }) {
+            browser.delegate = self
+            browser.browsedDeviceTypeMask = .camera
+            browser.start()
+            withLock { browserRunning = true }
+        }
         guard waitUntil(timeout: timeout, { self.withLock { self.device != nil } }) else {
             browser.stop()
             withLock { browserRunning = false }
@@ -728,9 +730,15 @@ public final class ICCCamera: NSObject, ICDeviceBrowserDelegate, ICDeviceDelegat
 
     @objc(device:didCloseSessionWithError:)
     public func device(_ device: ICDevice, didCloseSessionWithError error: Error?) {
-        withLock { sessionOpen = false }
+        withLock {
+            sessionOpen = false
+            // A closed PTP session also ends live view on the camera side.
+            liveViewOn = false
+        }
         if let error {
             emit("session closed with error: \(error.localizedDescription)")
+        } else {
+            emit("session closed")
         }
         delegate?.camera(self, didCloseSessionWithError: error)
     }

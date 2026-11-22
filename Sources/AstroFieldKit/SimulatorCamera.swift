@@ -32,6 +32,7 @@ public final class SimulatorCamera: CameraDevice, @unchecked Sendable {
     private var captureCount = 0
     private var liveViewOn = false
     private var lastCapture: ImageRecord?
+    private var liveStretch = LiveViewStretchSettings.default
 
     public init(scene: SimulatorScene = SimulatorScene(),
                 settings: ExposureSettings = ExposureSettings()) {
@@ -183,9 +184,29 @@ public final class SimulatorCamera: CameraDevice, @unchecked Sendable {
     public func livePreview() async throws -> LivePreview? {
         guard let luma = try await liveLumaPreview() else { return nil }
         guard let image = luma.displayImage() else { return nil }
-        let sequence = lock.withLock { liveSequence }
+        lock.lock()
+        let sequence = liveSequence
+        let stretch = liveStretch
+        lock.unlock()
+
+        // The analysis image keeps the simulator's existing auto-stretched
+        // preview. The monitor gets the same shared stretch the Nikon path uses,
+        // so gain/black controls behave identically across sources.
+        var display: CGImage?
+        var stats: LiveViewStretchStats?
+        if let linear = luma.displayImage(low: 0, high: max(1, luma.maxValue), gamma: 1),
+           let result = LiveViewStretch.stretch(linear, settings: stretch) {
+            display = result.image
+            stats = result.stats
+        }
         return LivePreview(sequence: sequence, image: image,
-                           width: luma.width, height: luma.height, isSimulated: true)
+                           width: luma.width, height: luma.height,
+                           isSimulated: true,
+                           displayImage: display, stretchStats: stats)
+    }
+
+    public func setLiveStretch(_ settings: LiveViewStretchSettings) {
+        lock.lock(); liveStretch = settings; lock.unlock()
     }
 
     /// Raw luminance of the next live frame. Focus measurement uses this directly
@@ -239,6 +260,14 @@ public final class SimulatorCamera: CameraDevice, @unchecked Sendable {
     public func setCondition(_ condition: SkyCondition) {
         lock.lock()
         scene.condition = condition
+        lock.unlock()
+    }
+
+    /// Puts the simulated lens cap on or off. Covered frames contain no stars
+    /// and no light-pollution gradient; they are the source for master darks.
+    public func setLensCovered(_ covered: Bool) {
+        lock.lock()
+        scene.lensCovered = covered
         lock.unlock()
     }
 

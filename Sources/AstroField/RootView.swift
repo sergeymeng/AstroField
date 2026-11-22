@@ -95,7 +95,7 @@ struct StatusBarView: View {
                     .font(CinemaFont.tiny(9.5))
                     .foregroundStyle(model.connectionColor)
                     .lineLimit(1)
-                if model.isConnecting {
+                if model.isConnecting || model.status.state.isReconnecting {
                     ProgressView().controlSize(.mini).scaleEffect(0.55)
                         .frame(width: 10, height: 10)
                 }

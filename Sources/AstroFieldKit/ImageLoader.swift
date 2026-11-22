@@ -43,6 +43,28 @@ public enum ImageLoader {
     /// Decoded luminance for measurement. `crop` is in native pixel coordinates.
     public static func luma(url: URL, maxWidth: Int? = 2400,
                             crop: CGRect? = nil) -> LumaImage? {
+        #if ASTROFIELD_LIBRAW
+        if isRaw(url), let linear = LibRawDecoder.decode(url: url) {
+            var image = linear.image
+            if let crop {
+                let native = dimensions(url: url) ?? (image.width, image.height)
+                let scaleX = Double(image.width) / Double(max(1, native.0))
+                let scaleY = Double(image.height) / Double(max(1, native.1))
+                let rect = CGRect(x: crop.minX * scaleX,
+                                  y: crop.minY * scaleY,
+                                  width: crop.width * scaleX,
+                                  height: crop.height * scaleY)
+                if let cropped = image.cropped(x: Int(rect.minX), y: Int(rect.minY),
+                                               width: Int(rect.width),
+                                               height: Int(rect.height)) {
+                    image = cropped
+                }
+            } else if let maxWidth, image.width > maxWidth {
+                image = image.downsampled(maxWidth: maxWidth)
+            }
+            return image
+        }
+        #endif
         guard let image = ciImage(url: url) else { return nil }
         return luma(from: image, maxWidth: maxWidth, crop: crop)
     }
@@ -61,6 +83,7 @@ public enum ImageLoader {
         public var iso: Int?
         public var exposureSeconds: Double?
         public var aperture: Double?
+        public var focalLengthMM: Double?
         public var width: Int?
         public var height: Int?
     }
@@ -86,6 +109,9 @@ public enum ImageLoader {
         }
         if let fNumber = exif?[kCGImagePropertyExifFNumber] as? Double {
             meta.aperture = fNumber
+        }
+        if let focal = exif?[kCGImagePropertyExifFocalLength] as? Double, focal > 0 {
+            meta.focalLengthMM = focal
         }
         return meta
     }
@@ -121,7 +147,27 @@ public enum ImageLoader {
             working = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         }
         let rect = working.extent.integral
-        guard let cg = context.createCGImage(working, from: rect) else { return nil }
-        return LumaImage.from(cgImage: cg)
+        let width = Int(rect.width)
+        let height = Int(rect.height)
+        guard width > 1, height > 1 else { return nil }
+        // Render straight into a 16-bit RGBA buffer. Going through
+        // createCGImage + a CGContext would apply an 8-bit default and a
+        // ColorSync gray conversion that folds 14-bit dark frames into a
+        // handful of near-black levels.
+        var rgba = [UInt16](repeating: 0, count: width * height * 4)
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        rgba.withUnsafeMutableBytes { raw in
+            guard let base = raw.baseAddress else { return }
+            context.render(working, toBitmap: base, rowBytes: width * 8,
+                           bounds: rect, format: .RGBA16, colorSpace: space)
+        }
+        var pixels = [Float](repeating: 0, count: width * height)
+        for index in pixels.indices {
+            let r = Float(rgba[index * 4])
+            let g = Float(rgba[index * 4 + 1])
+            let b = Float(rgba[index * 4 + 2])
+            pixels[index] = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        }
+        return LumaImage(width: width, height: height, pixels: pixels)
     }
 }

@@ -4,28 +4,15 @@
 
 <h1 align="center">AstroField</h1>
 
-<p align="center">在 Mac 上设置拍摄计划、对焦和检查星空照片。</p>
+<p align="center"><strong>简体中文</strong> · <a href="README.en.md">English</a></p>
 
-AstroField 面向使用相机、镜头和三脚架拍银河与星野的摄影师。把曝光时间、拍摄间隔和张数设好，就可以在同一个窗口里看拍摄进度、放大星点、比较试拍结果。应用使用 SwiftUI，照片处理在本机完成。
+AstroField 是一款在 Mac 上拍摄星野和银河的工具。用 USB 连接 Nikon 相机后，可以在取景画面上找星、微调焦点，再按设定的间隔拍一组照片。拍摄中可以放大检查四角的星点，也可以预览叠加效果。照片在本机处理。
 
-![AstroField 主界面，使用模拟星空](docs/screenshots/01-idle.png)
-
-截图来自内置模拟相机。没有连接设备也可以运行应用、测试拍摄计划和对焦流程。
-
-## 可以做什么
-
-- **定时拍摄。** 立即开始、倒计时或指定时间开始；支持固定开拍间隔和曝光结束后等待两种节奏。可以保存预设、暂停续拍，按张数或时间结束。
-- **对焦与试拍。** 自动检测星点，执行对焦搜索并显示曲线；也可以手动微调，比较不同快门、光圈或包围曝光的照片。
-- **检查照片。** 打开 NEF、JPEG、PNG 和 TIFF，查看整图、中心、四角及原始像素裁切。显示星点大小、形状、背景和直方图，支持前后对比。
-- **跟踪拍摄变化。** 查看逐张指标，设置质量提醒、暂停条件和重对焦规则。
-- **叠加预览。** 将星点平移对齐后累积显示，也提供固定机位的星轨预览。
-- **离线演练。** 模拟器可以改变焦点、星点移动、天空亮度和云量，注入拍摄错误；照片回放可以使用自己的素材。
-
-天空／地景分组、焦点包围、曝光渐变和亮轨迹候选检测也已接入界面，仍在验证中。
+![模拟星空中，取景器用圆圈标出星点，用十字标出最亮星](docs/screenshots/23-findstar.png)
 
 ## 运行
 
-需要 macOS 14 或更新版本，以及提供 Swift 5.10 或更新工具链的 Xcode / Command Line Tools。
+需要 macOS 14 或更新版本，以及 Swift 5.10 或更新版本的工具链（Xcode 或 Xcode Command Line Tools）。
 
 ```bash
 git clone https://github.com/sergeymeng/AstroField.git
@@ -33,46 +20,47 @@ cd AstroField
 swift run AstroField
 ```
 
-默认连接模拟相机。顶部来源菜单可以切换为照片回放或 Nikon USB；点击下方参数可以编辑拍摄计划，右侧面板提供对焦、分析、试拍和叠加操作。
+首次启动会打开模拟相机。要用自己的照片，打开顶部来源菜单，选择照片回放。要连接相机，将机身 USB 模式设为 MTP/PTP，退出占用相机的传输软件，再从来源菜单选择 **Nikon USB**。
 
-也可以构建一个本地 `.app`：
+要生成可从 Finder 启动的本地应用，运行以下命令。脚本会生成带本地临时签名的 Release 版本。
 
 ```bash
 ./scripts/build_app.sh
 open dist/AstroField.app
 ```
 
-当前提供源码构建，生成的应用使用本地临时签名，尚未做 Apple 公证。
+## 找星与对焦
 
-## 相机支持
+1. 在 **VIEWFINDER** 打开「取景拉伸」。调高「增益」可以看清较暗的星点，用「黑场」调整天空背景的亮度。星点测量和对焦使用相机原始 JPEG 解码帧。
+2. 点击「找星模式」。AstroField 暂时将 ISO 调到 12800，圈出检测到的星点，并用十字标出最亮星。支持 MFDrive 的镜头可以点击「对焦最亮星」，面板会显示星点的半高全宽（FWHM），单位为像素。
+3. 如果实时取景持续找不到星，AstroField 会以 ISO 12800 拍一张 2 秒 JPEG，单独用于取景。画面里仍没有星点时，面板显示「未检测到星点」。点击「退出找星」恢复进入前的拍摄设置。
 
-首批目标机型是 Nikon Z7 II 和 Z8。应用通过 macOS 的 ImageCaptureCore 发送 PTP 命令，**正常构建和运行不需要下载 Nikon SDK**。
+Nikon USB 会话中断时，AstroField 会暂停正在运行的序列，状态栏显示「重连中 n/5」。连接恢复后，状态栏显示「已恢复」，实时取景自动重开。连续五次失败后，可在底部日志查看最后一次错误。「保持后台活跃」可让应用在显示器休眠期间继续轮询相机。
 
-Z7 II 的底层连接、LiveView、RAW 下载、Bulb 和镜头调焦指令已有室内实测记录。应用内完整拍摄流程仍需复验，Z8 尚未实测。自动对焦、质量规则和参数试拍的验证目前以模拟数据为主，还没有完成真实星空验收。
+## 拍摄与处理
 
-连接时将相机 USB 模式设为 MTP/PTP，并退出正在占用相机的其他程序。不同机身、固件和镜头的可用操作可能不同。
+| 要做的事 | 操作 |
+| --- | --- |
+| 拍一组曝光 | 设置立即、倒计时或定时开始。可以固定每张的开拍间隔，也可以让相机在每次曝光后等待。暂停或停止时，当前曝光会先完成。 |
+| 选择曝光 | 在 M 档使用「星空 Auto」。应用根据焦距估算拖线上限，再用试拍检查背景亮度、星点和高光。参数通过检查后写入计划。也可自行比较不同快门或光圈的试拍。 |
+| 检查照片 | 打开 NEF、JPEG、PNG 或 TIFF，在整图、中心、四角和原始像素之间切换。用 FWHM 比较焦点变化，按逐张指标设置质量提醒、暂停或重对焦。 |
+| 采集暗场 | 盖上镜头盖，在 DARK 面板按拍摄所用的 ISO 和曝光时间采集多帧暗场。应用合成主暗场，供后续分析和叠加减除热像素与暗电流。 |
+| 叠加与导出 | 拍摄时可预览星点对齐或固定机位的星轨效果。拍完后在 SESSION 面板叠加本次拍摄的亮场，按星点平移对齐，导出 16 位 TIFF 和 PNG 预览。 |
 
-## 使用时需要知道
+会话默认保存在 `~/Pictures/AstroField/` 下的时间戳目录。每张照片的 JSON 记录包含拍摄参数和质量指标。对于实拍 NEF，记录指向原片位置。SESSION 面板可导出整组拍摄的 CSV 或 JSON 报告。
 
-- NEF 通过 Core Image 解码。直方图和星点指标来自解码后的图像，不能当作传感器原始通道测量；全图快速分析与原始像素裁切也使用不同分辨率。
-- 自动对焦搜索目前优先使用 LiveView 测量，结束后补拍一张照片检查。实际镜头上的精度仍需验证。
-- 现场叠加是低分辨率预览，目前只处理平移，没有处理旋转、视差或天空与地景的分离。
-- “停止”会停止后续调度，当前曝光仍会完成。
-- 星图解析、全景接片和地景焦点合成尚未实现。
+## 相机与 RAW 解码
+
+Nikon USB 连接使用 macOS 的 ImageCaptureCore 和 PTP。Z7 II 已在室内实测连接、实时取景、NEF 下载、短序列和机身关屏。夜空取景拉伸、找星和自动重连待 Z7 II 现场验证。Z8 是目标机型，尚待实测。[Z7 II 验收记录](docs/Z7II_APP_ACCEPTANCE.md)
+
+NEF 默认通过 Core Image 解码。安装 Homebrew 的 LibRaw 后重新构建，可使用线性亮度做测量和暗场校准。Nikon SDK 用于可选的 MAID 命令行诊断。
 
 <details>
-<summary>更多界面截图（模拟数据）</summary>
+<summary>更多模拟相机截图</summary>
 
-自动对焦：
-
+![拍摄计划与主界面](docs/screenshots/01-idle.png)
 ![自动对焦曲线](docs/screenshots/03-focus.png)
-
-四角检查：
-
 ![星点四角检查](docs/screenshots/05-corners.png)
-
-叠加预览：
-
 ![现场叠加预览](docs/screenshots/06-stack.png)
 
 </details>
@@ -84,8 +72,4 @@ swift test
 swift run afspike selftest
 ```
 
-`Sources/AstroField` 是 SwiftUI 界面，`AstroFieldKit` 包含模拟器、拍摄计划、对焦和图像处理，`AFSpikeCore` 提供 ImageCaptureCore / PTP 底层。`afspike` 是独立的命令行诊断工具。
-
-[开发说明](docs/DEVELOPMENT.md)包含回放、截图和可选 Nikon MAID 后端的配置方法。[架构说明](docs/ARCHITECTURE.md)记录了相机接口与图像处理流程。
-
-Nikon SDK 文件、实拍原片和本地测试日志不包含在仓库中。
+SwiftUI 界面位于 `Sources/AstroField`，拍摄计划、对焦与图像处理位于 `Sources/AstroFieldKit`，ImageCaptureCore 和 PTP 通信位于 `Sources/AFSpikeCore`。[开发说明](docs/DEVELOPMENT.md) · [架构说明](docs/ARCHITECTURE.md)

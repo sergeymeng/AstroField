@@ -69,6 +69,12 @@ public struct FocusSearchConfig: Sendable {
     public var minStars: Int = 5
     public var minImprovement: Double = 0.06
     public var verifySamples: Int = 2
+    /// Both sides must be at least this much worse than the baseline before
+    /// the search accepts that it already sits at the focus minimum.
+    public var alreadyFocusedTolerance: Double = 0.015
+    /// Overshoot used by every final approach so backlash is taken up in the
+    /// direction of travel.
+    public var approachOvershoot: Int = 8
 
     public init() {}
 }
@@ -84,6 +90,22 @@ public actor FocusSearcher {
                     shouldCancel: @Sendable () -> Bool = { false }) async -> FocusSearchResult {
         var samples: [FocusSample] = []
         var position = 0
+
+        /// Move to `target`, overshooting first and approaching from one side
+        /// so the lens backlash is taken up consistently.
+        func moveApproaching(_ target: Int) async throws {
+            let delta = target - position
+            guard delta != 0 else { return }
+            let direction = delta > 0 ? 1 : -1
+            let overshoot = min(max(0, config.approachOvershoot), abs(delta))
+            if overshoot > 0 {
+                try await probe.move(signedSteps: delta + direction * overshoot)
+                try await probe.move(signedSteps: -direction * overshoot)
+            } else {
+                try await probe.move(signedSteps: delta)
+            }
+            position = target
+        }
 
         func finish(_ status: FocusSearchStatus, bestSteps: Int?,
                     baseline: FocusMeasurement?, best: FocusMeasurement?,
@@ -113,8 +135,7 @@ public actor FocusSearcher {
                                   best: best, confidence: 0, message: "已取消")
                 }
                 if position != 0 {
-                    try await probe.move(signedSteps: -position)
-                    position = 0
+                    try await moveApproaching(0)
                 }
                 var localBest = baseline
                 var localBestPos = 0
@@ -158,14 +179,17 @@ public actor FocusSearcher {
                 if lostStars { break }
             }
 
-            // Fine search around the coarse best.
-            if bestPos != position {
-                try await probe.move(signedSteps: bestPos - position)
-                position = bestPos
-            }
+            // Fine search around the coarse best. Scan monotonically from one
+            // side so every measurement is taken with the same backlash state.
+            var offsets = config.fineOffsets
+            if !offsets.contains(0) { offsets.append(0) }
+            offsets.sort()
             var fineBest = best
             var fineBestPos = bestPos
-            for offset in config.fineOffsets {
+            if let first = offsets.first {
+                try await moveApproaching(bestPos + first * config.fineStep)
+            }
+            for offset in offsets {
                 if shouldCancel() {
                     return finish(.cancelled, bestSteps: bestPos, baseline: baseline,
                                   best: best, confidence: 0, message: "已取消")
@@ -187,8 +211,7 @@ public actor FocusSearcher {
                 }
             }
             if fineBestPos != position {
-                try await probe.move(signedSteps: fineBestPos - position)
-                position = fineBestPos
+                try await moveApproaching(fineBestPos)
             }
 
             // Verify with repeated measurements at the chosen position.
@@ -205,12 +228,30 @@ public actor FocusSearcher {
                 ? (baseline.medianFWHM - verified.medianFWHM) / baseline.medianFWHM
                 : 0
             let confidence = max(0, min(1, improvement / 0.20))
+            let tolerance = config.alreadyFocusedTolerance
+            let nearestPositive = samples.filter { $0.relativeSteps > 0 }
+                .min { $0.relativeSteps < $1.relativeSteps }
+            let nearestNegative = samples.filter { $0.relativeSteps < 0 }
+                .max { $0.relativeSteps < $1.relativeSteps }
+            let bothSidesWorse = (nearestPositive.map {
+                $0.measurement.medianFWHM > baseline.medianFWHM * (1 + tolerance)
+            } ?? false) && (nearestNegative.map {
+                $0.measurement.medianFWHM > baseline.medianFWHM * (1 + tolerance)
+            } ?? false)
+            let alreadyFocused = bothSidesWorse && fineBestPos == 0
+                && verified.medianFWHM >= baseline.medianFWHM * (1 - tolerance)
 
             if verified.starCount >= config.minStars, improvement >= config.minImprovement {
                 return finish(.confirmed, bestSteps: fineBestPos, baseline: baseline,
                               best: verified, confidence: confidence,
                               message: String(format: "已确认，FWHM 改善 %.0f%%，相对步数 %+d",
                                               improvement * 100, fineBestPos))
+            }
+            if verified.starCount >= config.minStars, alreadyFocused {
+                return finish(.confirmed, bestSteps: 0, baseline: baseline,
+                              best: verified, confidence: 0.5,
+                              message: String(format: "已在对焦位置，FWHM %.2f",
+                                              verified.medianFWHM))
             }
             return finish(.unconfirmed, bestSteps: fineBestPos, baseline: baseline,
                           best: verified, confidence: confidence,
