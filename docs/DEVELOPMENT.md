@@ -10,6 +10,8 @@ swift run afspike selftest
 
 `./scripts/build_app.sh` 在 `dist/` 生成带本地临时签名的 Release 应用。打包时，`scripts/build_icons.sh` 从 `assets/branding/app-icon.png` 生成 ICNS。修改图标时可单独运行这个脚本，同时提交 PNG 和生成的 `Sources/AstroField/Resources/AppIcon.icns`。
 
+发布包使用 `./scripts/build_app.sh release --universal` 构建。它合并 arm64 和 x86_64 两个架构，使用系统的 Core Image 解码 NEF。常规源码构建仍可启用 LibRaw。
+
 ## 重现一个取景画面
 
 查看找星标记用 `findstar`，检查无星时的 2 秒试拍用 `findstarblack`，测试模拟镜头对焦用 `findstarfocus`。例如，在终端运行：

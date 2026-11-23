@@ -437,6 +437,7 @@
 "用当前计划更新" = "Use current plan";
 "用星点对齐各张照片，再取平均。对齐仅校正水平和垂直位移。" = "Align the stars and average the frames. Alignment corrects horizontal and vertical shifts.";
 "电量" = "Battery";
+"界面语言" = "Language";
 "盖上镜头盖，用拍星时的 ISO 和曝光时间采集几张暗场。应用取平均后，用它校正分析图和叠加图。" = "Fit the lens cap and use the same ISO and exposure as your lights. The averaged dark corrects the analysis and the stack.";
 "目录名重复过多" = "Too many folders with the same name";
 "目标张数" = "Frame count";
@@ -519,6 +520,7 @@
 "负步数" = "Negative step count";
 "质量规则" = "Quality checks";
 "起" = "From";
+"跟随系统" = "Follow System";
 "跳过 %@ 个固定时间点" = "Skipped %@ scheduled starts";
 "跳过时间点" = "Skip missed starts";
 "载入" = "Load";

@@ -56,6 +56,30 @@ struct ToastState: Identifiable, Equatable {
     var text: String
 }
 
+enum FinderStatus {
+    case idle, searching, testing
+    case stars(Int, testFrame: Bool)
+    case detail(String)
+
+    var text: String {
+        switch self {
+        case .idle: return ""
+        case .searching: return L10n.text("临时 ISO 12800，寻找星点…")
+        case .testing: return L10n.text("测试帧：2 s / ISO 12800 / JPEG")
+        case .stars(0, let testFrame):
+            return L10n.text(testFrame ? "测试帧：未检测到星点" : "未检测到星点")
+        case .stars(let count, let testFrame):
+            return L10n.text(testFrame ? "测试帧：检测到 %@ 颗星" : "检测到 %@ 颗星", count)
+        case .detail(let message): return message
+        }
+    }
+
+    var hasNoStars: Bool {
+        if case .stars(0, _) = self { return true }
+        return false
+    }
+}
+
 struct FocusUIState {
     var isRunning = false
     var samples: [FocusSample] = []
@@ -216,7 +240,7 @@ final class AppModel: ObservableObject {
     @Published var liveStretchStats: LiveViewStretchStats?
     @Published var keepAlive = true
     @Published var findStarMode = false
-    @Published var findStarStatus = ""
+    @Published var findStarStatus: FinderStatus = .idle
     @Published var findStarFocusMessage = ""
     @Published var liveBrightestStar: DetectedStar?
     @Published var finderTestFrameShown = false
@@ -380,15 +404,15 @@ final class AppModel: ObservableObject {
     private func observePowerEvents() {
         let center = NSWorkspace.shared.notificationCenter
         let names: [(Notification.Name, String, LogEntry.Level)] = [
-            (NSWorkspace.screensDidSleepNotification, L10n.text("显示休眠"), .info),
-            (NSWorkspace.screensDidWakeNotification, L10n.text("显示唤醒"), .info),
-            (NSWorkspace.willSleepNotification, L10n.text("系统休眠"), .warning),
-            (NSWorkspace.didWakeNotification, L10n.text("系统唤醒"), .info)
+            (NSWorkspace.screensDidSleepNotification, "显示休眠", .info),
+            (NSWorkspace.screensDidWakeNotification, "显示唤醒", .info),
+            (NSWorkspace.willSleepNotification, "系统休眠", .warning),
+            (NSWorkspace.didWakeNotification, "系统唤醒", .info)
         ]
         for (name, text, level) in names {
             center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in
-                    self?.appendLog(text, level: level)
+                    self?.appendLog(L10n.text(text), level: level)
                 }
             }
         }
@@ -850,7 +874,7 @@ final class AppModel: ObservableObject {
         liveImage = nil
         liveStretchStats = nil
         findStarMode = false
-        findStarStatus = ""
+        findStarStatus = .idle
         findStarFocusMessage = ""
         liveBrightestStar = nil
         finderTestAttempted = true
@@ -950,7 +974,7 @@ final class AppModel: ObservableObject {
         liveAssistEnabled = true
         liveZoom = .x1
         if monitorMode != .live { monitorMode = .live }
-        findStarStatus = L10n.text("临时 ISO 12800，寻找星点…")
+        findStarStatus = .searching
         var boosted = plan.settings
         boosted.iso = 12800
         Task {
@@ -959,7 +983,7 @@ final class AppModel: ObservableObject {
                 appendLog(L10n.text("找星模式：临时 ISO 12800"), level: .info)
                 refreshLiveLoop()
             } catch {
-                findStarStatus = L10n.text("设置 ISO 失败：%@", error)
+                findStarStatus = .detail(L10n.text("设置 ISO 失败：%@", error))
                 appendLog(L10n.text("找星模式设置失败：%@", error), level: .error)
                 exitFindStarMode()
             }
@@ -969,7 +993,7 @@ final class AppModel: ObservableObject {
     func exitFindStarMode() {
         guard findStarMode else { return }
         findStarMode = false
-        findStarStatus = ""
+        findStarStatus = .idle
         findStarFocusMessage = ""
         liveBrightestStar = nil
         finderTestAttempted = true
@@ -1058,9 +1082,9 @@ final class AppModel: ObservableObject {
                 focus.isRunning = false
                 focus.result = result
                 focus.message = result.message
-                findStarStatus = result.status == .confirmed
+                findStarStatus = .detail(result.status == .confirmed
                     ? String(format: L10n.text("最亮星已对焦，FWHM %.2f"), result.best?.medianFWHM ?? 0)
-                    : L10n.text("最亮星对焦未确认：%@", result.message)
+                    : L10n.text("最亮星对焦未确认：%@", result.message))
                 findStarFocusMessage = result.status == .confirmed
                     ? String(format: L10n.text("已对焦  FWHM %.2f"), result.best?.medianFWHM ?? 0)
                     : L10n.text("未确认：%@", result.message)
@@ -1071,7 +1095,7 @@ final class AppModel: ObservableObject {
             } catch {
                 focus.isRunning = false
                 focus.message = L10n.text("对焦失败：%@", error)
-                findStarStatus = L10n.text("最亮星对焦失败：%@", error)
+                findStarStatus = .detail(L10n.text("最亮星对焦失败：%@", error))
                 findStarFocusMessage = L10n.text("失败：%@", error)
                 appendLog(focus.message, level: .error)
                 suppressLive = false
@@ -1135,7 +1159,7 @@ final class AppModel: ObservableObject {
         guard findStarMode, !finderTestRunning else { return }
         if stars.isEmpty {
             finderZeroFrames += 1
-            findStarStatus = L10n.text("未检测到星点")
+            findStarStatus = .stars(0, testFrame: false)
             guard !finderTestAttempted,
                   finderZeroFrames >= 3,
                   Date().timeIntervalSince(finderModeStartedAt) > 2.5 else { return }
@@ -1143,14 +1167,14 @@ final class AppModel: ObservableObject {
             captureFinderTestFrame()
         } else {
             finderZeroFrames = 0
-            findStarStatus = L10n.text("检测到 %@ 颗星", stars.count)
+            findStarStatus = .stars(stars.count, testFrame: false)
         }
     }
 
     private func captureFinderTestFrame() {
         guard let camera, findStarMode, !finderTestRunning else { return }
         finderTestRunning = true
-        findStarStatus = L10n.text("测试帧：2 s / ISO 12800 / JPEG")
+        findStarStatus = .testing
         suppressLive = true
         liveTask?.cancel()
         liveTask = nil
@@ -1204,14 +1228,12 @@ final class AppModel: ObservableObject {
                         self.liveImage = raw
                     }
                     self.finderTestFrameShown = true
-                    self.findStarStatus = stars.isEmpty
-                        ? L10n.text("测试帧：未检测到星点")
-                        : L10n.text("测试帧：检测到 %@ 颗星", stars.count)
+                    self.findStarStatus = .stars(stars.count, testFrame: true)
                     self.appendLog(L10n.text("找星测试帧：%@ 颗星", stars.count),
                                    level: stars.isEmpty ? .warning : .info)
                 }
             } catch {
-                findStarStatus = L10n.text("测试帧失败：%@", error)
+                findStarStatus = .detail(L10n.text("测试帧失败：%@", error))
                 appendLog(L10n.text("找星测试帧失败：%@", error), level: .error)
             }
             if self.status.state.isConnected {
@@ -1885,7 +1907,7 @@ final class AppModel: ObservableObject {
                 histogram = AppModel.histogram(of: crop, bins: 64)
             }
         case .corners:
-            let labels = [L10n.text("左上"), L10n.text("右上"), L10n.text("左下"), L10n.text("右下")]
+            let labels = ["左上", "右上", "左下", "右下"]
             let rects = AppModel.cornerCrops(width: source.width, height: source.height)
             var images: [CGImage] = []
             var metrics: [String: Double] = [:]

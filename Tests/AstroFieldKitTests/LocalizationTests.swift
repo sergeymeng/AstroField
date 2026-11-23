@@ -54,6 +54,30 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(restored.displayName, "银河西侧")
     }
 
+    @MainActor
+    func testLanguageSelectionSurvivesRelaunch() throws {
+        let suite = "AstroFieldTests.language." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let originalPreferences = defaults.stringArray(forKey: "AppleLanguages")
+
+        let settings = LanguageSettings(defaults: defaults)
+        XCTAssertEqual(settings.choice, .system)
+        let initialLocale = settings.locale
+
+        settings.select(.simplifiedChinese)
+        let relaunched = LanguageSettings(defaults: defaults)
+        XCTAssertEqual(relaunched.choice, .simplifiedChinese)
+        XCTAssertEqual(relaunched.locale.language.languageCode?.identifier, "zh")
+
+        relaunched.select(.english)
+        XCTAssertEqual(LanguageSettings(defaults: defaults).choice, .english)
+        relaunched.select(.system)
+        XCTAssertEqual(LanguageSettings(defaults: defaults).choice, .system)
+        XCTAssertEqual(relaunched.locale, initialLocale)
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), originalPreferences)
+    }
+
     private func catalog(in bundle: Bundle) throws -> [String: String] {
         let url = try XCTUnwrap(bundle.url(forResource: "AstroField", withExtension: "strings"))
         let data = try Data(contentsOf: url)

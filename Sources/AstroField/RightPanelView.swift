@@ -484,13 +484,13 @@ private struct ViewfinderPanel: View {
                 }
                 if !model.findStarFocusMessage.isEmpty {
                     InfoRow(label: L10n.text("对焦结果"), value: model.findStarFocusMessage,
-                            color: model.findStarFocusMessage.hasPrefix(L10n.text("已对焦"))
+                            color: model.focus.result?.status == .confirmed
                                 ? palette.selected : palette.amber)
                 }
-                if !model.findStarStatus.isEmpty {
-                    Text(model.findStarStatus)
+                if !model.findStarStatus.text.isEmpty {
+                    Text(model.findStarStatus.text)
                         .font(CinemaFont.tiny(10))
-                        .foregroundStyle(model.findStarStatus.localizedCaseInsensitiveContains(L10n.text("未检测到星点"))
+                        .foregroundStyle(model.findStarStatus.hasNoStars
                                          ? palette.amber : palette.textSecondary)
                 }
             }
@@ -794,7 +794,7 @@ private struct AnalysisPanel: View {
 
                 if !model.cornerFWHM.isEmpty {
                     ForEach(model.cornerFWHM.keys.sorted(), id: \.self) { key in
-                        InfoRow(label: key,
+                        InfoRow(label: L10n.text(key),
                                 value: String(format: "FWHM %.2f", model.cornerFWHM[key] ?? 0))
                     }
                 }

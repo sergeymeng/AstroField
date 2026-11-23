@@ -5,13 +5,30 @@ cd "$(dirname "$0")/.."
 
 CONFIG="${1:-release}"
 ./scripts/build_icons.sh
-swift build -c "$CONFIG"
-BIN=$(swift build -c "$CONFIG" --show-bin-path)
+if [[ "${2:-}" == "--universal" ]]; then
+  # The downloadable app uses Core Image and needs only macOS frameworks.
+  export ASTROFIELD_DISABLE_LIBRAW=1
+  unset NIKON_SDK_HEADERS
+  arches=(arm64 x86_64)
+else
+  arches=("$(uname -m)")
+fi
+
+executables=()
+for arch in "${arches[@]}"; do
+  swift build -c "$CONFIG" --arch "$arch" --product AstroField
+  bin_dir=$(swift build -c "$CONFIG" --arch "$arch" --show-bin-path)
+  executables+=("$bin_dir/AstroField")
+done
 
 APP="dist/AstroField.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN/AstroField" "$APP/Contents/MacOS/AstroField"
+if (( ${#executables} == 1 )); then
+  cp "$executables[1]" "$APP/Contents/MacOS/AstroField"
+else
+  lipo -create "${executables[@]}" -output "$APP/Contents/MacOS/AstroField"
+fi
 cp "Sources/AstroField/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 cp -R Sources/AstroFieldKit/Resources/*.lproj "$APP/Contents/Resources/"
@@ -27,8 +44,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleName</key><string>AstroField</string>
   <key>CFBundleDisplayName</key><string>AstroField</string>
   <key>CFBundleIdentifier</key><string>com.astrofield.app</string>
-  <key>CFBundleVersion</key><string>0.1.0</string>
-  <key>CFBundleShortVersionString</key><string>0.1</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleExecutable</key><string>AstroField</string>
   <key>CFBundleIconFile</key><string>AppIcon.icns</string>
   <key>CFBundlePackageType</key><string>APPL</string>

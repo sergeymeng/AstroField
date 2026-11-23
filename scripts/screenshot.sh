@@ -16,7 +16,7 @@ shoot() {
   ASTROFIELD_DEMO="$demo" ASTROFIELD_SESSION_ROOT="$DEMO_SESSION" \
     ASTROFIELD_DARK_DIR="$DEMO_DARK" \
     ASTROFIELD_SHOT_PATH="$OUT/$name.png" \
-    ASTROFIELD_SHOT_DELAY="$delay" ASTROFIELD_SHOT_EXIT=1 "$BIN" -AppleLanguages "($language)" >/dev/null 2>&1
+    ASTROFIELD_SHOT_DELAY="$delay" ASTROFIELD_SHOT_EXIT=1 "$BIN" -AstroFieldLanguage system -AppleLanguages "($language)" >/dev/null 2>&1
   echo "$OUT/$name.png"
 }
 
@@ -43,21 +43,21 @@ shoot 22-autostack autostack 30
 
 ASTROFIELD_DEMO=idle ASTROFIELD_WINDOW_SIZE=1180x760 \
   ASTROFIELD_SHOT_PATH="$OUT/12-small-window.png" ASTROFIELD_SHOT_DELAY=5 \
-  ASTROFIELD_SHOT_EXIT=1 "$BIN" -AppleLanguages '(zh-Hans)' >/dev/null 2>&1
+  ASTROFIELD_SHOT_EXIT=1 "$BIN" -AstroFieldLanguage system -AppleLanguages '(zh-Hans)' >/dev/null 2>&1
 echo "$OUT/12-small-window.png"
 ASTROFIELD_DEMO=idle ASTROFIELD_WINDOW_SIZE=1920x1080 \
   ASTROFIELD_SHOT_PATH="$OUT/13-large-window.png" ASTROFIELD_SHOT_DELAY=5 \
-  ASTROFIELD_SHOT_EXIT=1 "$BIN" -AppleLanguages '(zh-Hans)' >/dev/null 2>&1
+  ASTROFIELD_SHOT_EXIT=1 "$BIN" -AstroFieldLanguage system -AppleLanguages '(zh-Hans)' >/dev/null 2>&1
 echo "$OUT/13-large-window.png"
 
 ASTROFIELD_NIGHT=1 ASTROFIELD_DEMO=idle ASTROFIELD_SHOT_PATH="$OUT/10-night.png" \
-  ASTROFIELD_SHOT_DELAY=4 ASTROFIELD_SHOT_EXIT=1 "$BIN" -AppleLanguages '(zh-Hans)' >/dev/null 2>&1
+  ASTROFIELD_SHOT_DELAY=4 ASTROFIELD_SHOT_EXIT=1 "$BIN" -AstroFieldLanguage system -AppleLanguages '(zh-Hans)' >/dev/null 2>&1
 echo "$OUT/10-night.png"
 
 if [ -d "logs/hw-z7ii/bulb" ]; then
   ASTROFIELD_PLAYBACK_DIR="$PWD/logs/hw-z7ii/bulb" ASTROFIELD_DEMO=analysis \
     ASTROFIELD_SESSION_ROOT="$DEMO_SESSION" ASTROFIELD_DARK_DIR="$DEMO_DARK" \
     ASTROFIELD_SHOT_PATH="$OUT/11-nef-playback.png" ASTROFIELD_SHOT_DELAY=9 \
-    ASTROFIELD_SHOT_EXIT=1 "$BIN" -AppleLanguages '(zh-Hans)' >/dev/null 2>&1
+    ASTROFIELD_SHOT_EXIT=1 "$BIN" -AstroFieldLanguage system -AppleLanguages '(zh-Hans)' >/dev/null 2>&1
   echo "$OUT/11-nef-playback.png"
 fi

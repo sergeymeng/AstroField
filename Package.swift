@@ -16,7 +16,8 @@ let sdkSettings: [SwiftSetting] = sdkEnabled ? [.define("ASTROFIELD_NIKON_SDK")]
 // LIBRAW_PREFIX) the linear RAW decoder is compiled into AstroFieldKit.
 let librawPrefix = ProcessInfo.processInfo.environment["LIBRAW_PREFIX"]
     ?? "/opt/homebrew/opt/libraw"
-let librawEnabled = FileManager.default.fileExists(
+let librawEnabled = ProcessInfo.processInfo.environment["ASTROFIELD_DISABLE_LIBRAW"] != "1"
+    && FileManager.default.fileExists(
     atPath: librawPrefix + "/include/libraw/libraw.h")
 let librawDependencies: [Target.Dependency] = librawEnabled ? ["CLibRaw"] : []
 let librawSettings: [SwiftSetting] = librawEnabled ? [.define("ASTROFIELD_LIBRAW")] : []

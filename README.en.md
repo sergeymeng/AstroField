@@ -10,7 +10,11 @@ AstroField lets you focus a USB-connected Nikon on a star and shoot a sequence f
 
 ## Run on macOS
 
-You'll need macOS 14 or later and Swift 5.10 or newer.
+[Download AstroField 0.1.0 for Mac](https://github.com/sergeymeng/AstroField/releases/download/v0.1.0/AstroField-0.1.0-macOS-universal.zip). Unzip it and drag AstroField to Applications. The app runs on Intel and Apple silicon Macs with macOS 14 or later.
+
+Use the globe at the top right of the window to choose English, 简体中文 or Follow System. The window updates immediately and remembers your choice for the next launch.
+
+To run from source, install Swift 5.10 or newer.
 
 ```sh
 git clone https://github.com/sergeymeng/AstroField.git
@@ -19,8 +23,6 @@ swift run AstroField
 ```
 
 The simulator opens on launch, so you can try a sequence straight away. To use a camera, set its USB mode to MTP/PTP and select **Nikon USB** from the source menu at the top of the window. For a Finder app, run `./scripts/build_app.sh` and open `dist/AstroField.app`.
-
-AstroField follows your macOS app language. To launch in English from the terminal, use `swift run AstroField -AppleLanguages '(en)'`. For the Finder app, choose English for AstroField in System Settings → General → Language & Region → Applications, then reopen it.
 
 ## When the viewfinder looks like noise
 

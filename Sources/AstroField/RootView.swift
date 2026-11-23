@@ -74,7 +74,7 @@ struct StatusBarView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(2.4)
                     .foregroundStyle(palette.text)
-                Text("0.1")
+                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0")
                     .font(CinemaFont.micro(8))
                     .tracking(1)
                     .foregroundStyle(palette.textDim)
@@ -211,6 +211,27 @@ struct StatusBarView: View {
 
     private var toolbar: some View {
         HStack(spacing: 2) {
+            Menu {
+                Picker(L10n.text("界面语言"), selection: Binding(
+                    get: { LanguageSettings.shared.choice },
+                    set: { LanguageSettings.shared.select($0) }
+                )) {
+                    ForEach(AppLanguage.allCases, id: \.self) { language in
+                        Text(language.title).tag(language)
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Image(systemName: "globe")
+                    .frame(width: 26, height: 26)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help(L10n.text("界面语言"))
+            .accessibilityLabel(L10n.text("界面语言"))
+            .accessibilityIdentifier("interfaceLanguage")
+
             iconButton(systemName: "grid", active: model.showGrid, help: L10n.text("九宫格")) {
                 model.showGrid.toggle()
             }

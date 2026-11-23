@@ -65,6 +65,7 @@ struct AstroFieldApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
+                .environment(\.locale, LanguageSettings.shared.locale)
                 .environment(\.palette, model.nightMode ? .night : .dark)
                 .preferredColorScheme(.dark)
         }

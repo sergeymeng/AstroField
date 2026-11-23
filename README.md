@@ -10,7 +10,11 @@
 
 ## 在 Mac 上运行
 
-需要 macOS 14 或更新版本，以及 Swift 5.10 或更新版本的工具链。
+需要 macOS 14 或更新版本。[下载 AstroField 0.1.0（Intel 和 Apple 芯片）](https://github.com/sergeymeng/AstroField/releases/download/v0.1.0/AstroField-0.1.0-macOS-universal.zip)，解压后将 AstroField 拖到「应用程序」。
+
+窗口右上角的地球图标可以切换「简体中文」「English」或「跟随系统」。选择即时生效，下次启动会沿用。
+
+要从源码运行，需要 Swift 5.10 或更新版本的工具链。
 
 ```sh
 git clone https://github.com/sergeymeng/AstroField.git
@@ -19,8 +23,6 @@ swift run AstroField
 ```
 
 启动后就能在模拟星空里试拍。接真机时，将相机的 USB 模式设为 MTP/PTP，在窗口顶部的来源菜单选择 **Nikon USB**。要从 Finder 启动，可运行 `./scripts/build_app.sh`，然后打开 `dist/AstroField.app`。
-
-界面语言跟随 macOS。要单独改成英文，在「系统设置 → 通用 → 语言与地区 → 应用程序」为 AstroField 选择 English，然后重新打开。源码版可以直接用 `swift run AstroField -AppleLanguages '(en)'` 启动。
 
 ## 取景器里只有噪点时
 
